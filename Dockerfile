@@ -1,6 +1,6 @@
-FROM caddy:2.8-alpine AS caddy
 # EasyTier 镜像可通过 --build-arg EASYTIER_IMAGE=... 覆盖（国内可使用镜像加速源）
 ARG EASYTIER_IMAGE=easytier/easytier:latest
+FROM caddy:2.8-alpine AS caddy
 FROM ${EASYTIER_IMAGE} AS easytier
 FROM node:20-alpine AS node
 
