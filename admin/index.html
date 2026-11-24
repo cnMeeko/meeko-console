@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SSL 证书管理</title>
+<style>
+  :root { --primary:#1677ff; --ok:#0f9d58; --warn:#d48806; --bad:#d4380d; --line:#e8ecf2; --muted:#8a93a3; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#f2f4f8; color:#111827; font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",Arial,sans-serif; font-size:14px; }
+  .wrap { max-width:920px; margin:0 auto; padding:24px 16px 48px; }
+  h1 { font-size:22px; margin:0 0 6px; }
+  .desc { color:var(--muted); font-size:13px; line-height:1.7; margin:0 0 18px; }
+  .card { background:#fff; border-radius:12px; box-shadow:0 6px 24px rgba(15,23,42,.08); padding:18px; }
+  .tabs { display:flex; gap:8px; margin:0 0 12px; }
+  .tab { border:0; background:#e6ecf6; color:#4a5568; padding:8px 18px; border-radius:8px; font-size:14px; cursor:pointer; }
+  .tab.active { background:var(--primary); color:#fff; }
+  .ddns-text { width:100%; min-height:120px; padding:12px; border:1px solid var(--line); border-radius:10px; background:#fafbfd; color:#111827; font-family:ui-monospace,SFMono-Regular,Consolas,"Courier New",monospace; font-size:13px; line-height:1.75; resize:vertical; }
+  .ddns-text:focus { outline:none; border-color:var(--primary); background:#fff; }
+  .ddns-grid { display:grid; grid-template-columns:1fr 1fr; gap:0 14px; }
+  @media (max-width:640px) { .ddns-grid { grid-template-columns:1fr; } }
+  .ddns-actions { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin:4px 0 12px; }
+  .ddns-group { border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:14px; background:#fff; }
+  .ddns-group-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+  .g-toggle { display:flex; align-items:center; gap:8px; border:0; background:none; padding:0; cursor:pointer; font-size:14px; color:#1e2a3d; text-align:left; }
+  .g-arrow { display:inline-block; color:var(--muted); transition:transform .15s; }
+  .ddns-group:not(.collapsed) .g-arrow { transform:rotate(90deg); }
+  .g-sub { color:var(--muted); font-size:12.5px; font-weight:400; }
+  .ddns-group.collapsed .ddns-body { display:none; }
+  .ddns-group.collapsed .ddns-group-head { margin-bottom:0; }
+  .g-head-right { display:flex; align-items:center; gap:8px; }
+  .g-provider-text { font-size:13px; color:#64748b; }
+  .ddns-body-foot { display:flex; justify-content:flex-end; margin-top:10px; }
+  .ddns-body-foot .btn { padding:6px 12px; font-size:13px; }
+  .ddns-group-head select { max-width:220px; }
+  .ddns-group-head .btn { padding:6px 12px; font-size:13px; }
+  .ddns-sec { border-top:1px solid var(--line); margin-top:14px; padding-top:14px; }
+  .ddns-sec-title { font-size:14px; font-weight:600; margin:0 0 10px; color:#1e2a3d; }
+  .ddns-hint { margin:8px 0 14px; font-size:12.5px; color:var(--muted); line-height:1.8; }
+  .ddns-hint code { background:#eef4ff; color:var(--primary); border-radius:4px; padding:0 5px; }
+  .row .err { display:block; margin-top:5px; color:var(--bad); font-size:12.5px; word-break:break-all; }
+  .et-grid { display:grid; grid-template-columns:1fr 1fr; gap:0 14px; }
+  .et-actions { display:flex; gap:8px; margin:4px 0 12px; flex-wrap:wrap; }
+  .et-status { font-size:13px; color:#475569; margin:0 0 12px; }
+  .et-status b { color:var(--ok); }
+  .et-status b.off { color:var(--bad); }
+  .et-logs { margin:0; background:#0f172a; color:#cbd5e1; border-radius:8px; padding:12px; height:240px; overflow:auto; font-size:12px; line-height:1.5; white-space:pre-wrap; word-break:break-all; }
+  @media (max-width:640px) { .et-grid { grid-template-columns:1fr; } }
+  .toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; flex-wrap:wrap; }
+  .btn { border:0; border-radius:8px; padding:9px 16px; font-size:14px; cursor:pointer; background:#eef4ff; color:var(--primary); }
+  .btn.primary { background:var(--primary); color:#fff; }
+  .btn.danger { background:#fff1f0; color:var(--bad); }
+  .btn:disabled { opacity:.6; cursor:not-allowed; }
+  .row { display:flex; align-items:center; gap:14px; padding:14px 4px; border-bottom:1px solid var(--line); }
+  .row:last-child { border-bottom:0; }
+  .row .main { flex:1; min-width:0; }
+  .row b { font-size:15px; }
+  .row .meta { display:block; margin-top:5px; color:var(--muted); font-size:12.5px; }
+  .badge { display:inline-block; margin-left:8px; padding:1px 9px; border-radius:999px; font-size:12px; font-weight:500; }
+  .badge.valid { background:#e8f8ef; color:var(--ok); }
+  .badge.pending { background:#fff7e6; color:var(--warn); }
+  .badge.expired, .badge.error { background:#fff1f0; color:var(--bad); }
+  .actions { display:flex; gap:8px; flex:0 0 auto; }
+  .actions .btn { padding:5px 12px; font-size:13px; }
+  .empty { padding:34px 0; text-align:center; color:var(--muted); }
+  .msg { min-height:20px; margin:10px 0 0; font-size:13px; color:var(--muted); white-space:pre-line; }
+  .msg.bad { color:var(--bad); }
+  .mask { position:fixed; inset:0; background:rgba(15,23,42,.45); display:none; align-items:center; justify-content:center; padding:16px; z-index:20; }
+  .mask.show { display:flex; }
+  .dialog { width:100%; max-width:420px; background:#fff; border-radius:14px; padding:20px; }
+  .dialog h3 { margin:0 0 14px; font-size:17px; }
+  .field { margin-bottom:12px; }
+  .field label { display:block; font-size:12.5px; color:#64748b; margin-bottom:5px; }
+  .field input { width:100%; height:38px; padding:0 11px; border:1px solid var(--line); border-radius:8px; font-size:14px; background:#fafbfd; }
+  .field select { width:100%; height:38px; padding:0 11px; border:1px solid var(--line); border-radius:8px; font-size:14px; background:#fafbfd; }
+  .dialog .foot { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }
+  .login-box { max-width:380px; margin:8vh auto 0; }
+  .login-box h1 { text-align:center; }
+  .login-box .desc { text-align:center; }
+  .login-box .btn { width:100%; margin-top:6px; }
+  .account-line { font-size:13px; color:var(--muted); }
+  .account-line b { color:#1e2a3d; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <!-- 登录 -->
+  <div id="loginView" class="card login-box" hidden>
+    <h1>Meeko面板管理</h1>
+    <p class="desc">请输入管理账号后登录</p>
+    <div class="field"><label>用户名</label><input id="loginUser" value="admin" autocomplete="username"></div>
+    <div class="field"><label>密码</label><input id="loginPass" type="password" placeholder="请输入密码" autocomplete="current-password"></div>
+    <button class="btn primary" id="btnLogin" type="button">登录</button>
+    <p class="msg" id="loginMsg"></p>
+  </div>
+
+  <!-- 管理 -->
+  <div id="mainView" hidden>
+    <div class="toolbar">
+      <div>
+        <h1>Meeko面板管理</h1>
+        <p class="desc" style="margin:0">证书由服务器上的 Caddy 自动向 Let's Encrypt 申请并续期（90 天）。添加或修改域名后自动生效。</p>
+      </div>
+      <div class="account-line">
+        当前账号：<b id="currentUser">admin</b>
+        <button class="btn" id="btnAccount" type="button">修改账号</button>
+        <button class="btn" id="btnLogout" type="button">退出</button>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" id="tabSsl" type="button">SSL 证书</button>
+      <button class="tab" id="tabDdns" type="button">DDNS 动态解析</button>
+      <button class="tab" id="tabEt" type="button">EasyTier 组网</button>
+      <button class="tab" id="tabBackup" type="button">备份与恢复</button>
+    </div>
+
+    <div id="sslPanel">
+      <div class="card">
+        <div class="toolbar">
+          <span class="desc" style="margin:0" id="summary">加载中…</span>
+          <span>
+            <button class="btn" id="btnRefresh" type="button">刷新</button>
+            <button class="btn primary" id="btnAdd" type="button">添加域名</button>
+          </span>
+        </div>
+        <div id="list"><div class="empty">加载中…</div></div>
+        <p class="msg" id="msg"></p>
+      </div>
+    </div>
+
+    <div id="ddnsPanel" hidden>
+      <div class="card">
+        <div class="toolbar">
+          <div>
+            <h1 style="font-size:18px">DDNS 动态解析</h1>
+            <p class="desc" style="margin:0" id="ddnsSummary">保存后立即更新一次</p>
+          </div>
+          <span>
+            <button class="btn" id="btnDdnsRunAll" type="button">全部更新</button>
+          </span>
+        </div>
+        <div class="ddns-actions">
+          <span class="desc" style="margin:0">每个服务商单独一组密钥与记录，可同时添加阿里云、腾讯云、Cloudflare、Spaceship</span>
+          <button class="btn" id="btnDdnsAdd" type="button">添加服务商</button>
+        </div>
+        <div id="ddnsGroups"></div>
+        <p class="ddns-hint">
+          地址留空时自动获取服务器公网地址；也可用 <code>www:example.com</code> 手动指定主域名。<br>
+          Cloudflare 只需 API Token，没有 Secret 时只填 Key 一项。
+        </p>
+        <div id="ddnsList"><div class="empty">还没有配置</div></div>
+        <p class="msg" id="ddnsMsg"></p>
+        <details style="margin-top:14px">
+          <summary style="cursor:pointer;font-size:13px;color:#64748b">运行日志</summary>
+          <pre class="et-logs" id="ddnsLogs" style="margin-top:10px">暂无日志</pre>
+        </details>
+      </div>
+    </div>
+
+    <div id="etPanel" hidden>
+      <div class="card">
+        <div class="toolbar">
+          <div>
+            <h1 style="font-size:18px">EasyTier 服务端</h1>
+            <p class="desc" style="margin:0">作为服务端/共享节点运行，默认监听 11010（TCP/UDP）与 11011（WS/WG）。</p>
+          </div>
+          <button class="btn" id="btnEtRefresh" type="button">刷新状态</button>
+        </div>
+        <div class="et-status" id="etStatus">正在读取…</div>
+        <div class="et-grid">
+          <div class="field"><label>主机名</label><input id="etHostname" placeholder="如 服务器 A" autocomplete="off"></div>
+          <div class="field"><label>网络名称</label><input id="etNetwork" placeholder="如 mynet" autocomplete="off"></div>
+          <div class="field"><label>网络密码</label><input id="etSecret" type="password" placeholder="网络密钥" autocomplete="new-password"></div>
+          <div class="field"><label>虚拟 IP（可选）</label><input id="etIpv4" placeholder="如 10.0.0.1，留空仅转发" autocomplete="off"></div>
+          <div class="field"><label>监听地址</label><input id="etListeners" value="11010" autocomplete="off"></div>
+          <div class="field"><label>对端节点（可选）</label><input id="etPeers" placeholder="如 tcp://1.2.3.4:11010" autocomplete="off"></div>
+        </div>
+        <div class="field">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#475569">
+            <input type="checkbox" id="etPrivate" style="width:auto;height:auto"> 私有模式（仅同一网络可连接）
+          </label>
+        </div>
+        <div class="et-actions">
+          <button class="btn primary" id="btnEtSave" type="button">保存并启动</button>
+          <button class="btn" id="btnEtRestart" type="button">重启</button>
+          <button class="btn danger" id="btnEtStop" type="button">停止</button>
+        </div>
+        <p class="msg" id="etMsg"></p>
+        <pre class="et-logs" id="etLogs">加载中…</pre>
+      </div>
+    </div>
+
+    <div id="backupPanel" hidden>
+      <div class="card">
+        <div class="toolbar">
+          <div>
+            <h1 style="font-size:18px">备份与恢复</h1>
+            <p class="desc" style="margin:0">控制台配置（账号、域名、DDNS、EasyTier、Caddy 片段）可导出到本地，或备份到七牛云后随时恢复。</p>
+          </div>
+        </div>
+
+        <div class="ddns-sec">
+          <div class="ddns-sec-title">本地导入 / 导出</div>
+          <div class="et-actions">
+            <button class="btn primary" id="btnBackupExport" type="button">导出备份到本地</button>
+            <label class="btn" for="backupFile">选择备份文件</label>
+            <input type="file" id="backupFile" accept=".tar.gz,.gz" hidden>
+            <button class="btn" id="btnBackupImport" type="button">导入并恢复</button>
+          </div>
+          <p class="msg" id="backupMsg"></p>
+        </div>
+
+        <div class="ddns-sec">
+          <div class="ddns-sec-title">七牛云 Kodo 配置</div>
+          <div class="ddns-grid">
+            <div class="field"><label>AccessKey</label><input id="qiniuAK" autocomplete="off" placeholder="七牛云 AccessKey"></div>
+            <div class="field"><label>SecretKey</label><input id="qiniuSK" type="password" autocomplete="new-password" placeholder="留空则不修改"></div>
+            <div class="field"><label>Bucket 名称</label><input id="qiniuBucket" autocomplete="off"></div>
+            <div class="field"><label>存储区域</label><select id="qiniuRegion"></select></div>
+            <div class="field"><label>下载域名 Domain</label><input id="qiniuDomain" autocomplete="off" placeholder="如 xxx.bkt.clouddn.com"></div>
+            <div class="field"><label>对象前缀</label><input id="qiniuPrefix" autocomplete="off" value="ssl-console-backup/"></div>
+          </div>
+          <div class="et-actions">
+            <button class="btn primary" id="btnQiniuSave" type="button">保存配置</button>
+          </div>
+          <p class="msg" id="qiniuMsg"></p>
+        </div>
+
+        <div class="ddns-sec">
+          <div class="ddns-sec-title">七牛云备份</div>
+          <div class="et-actions">
+            <button class="btn primary" id="btnQiniuUpload" type="button">上传当前备份到七牛云</button>
+            <button class="btn" id="btnQiniuList" type="button">刷新列表</button>
+          </div>
+          <div id="qiniuList"><div class="empty">尚未读取备份列表</div></div>
+          <p class="msg" id="qiniuListMsg"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 域名弹窗 -->
+<div class="mask" id="mask">
+  <div class="dialog">
+    <h3 id="dlgTitle">添加域名</h3>
+    <div class="field"><label>域名</label><input id="fDomain" placeholder="如 www.example.com" autocomplete="off"></div>
+    <div class="field"><label>备注（可选）</label><input id="fRemark" placeholder="如 主站 / 官网" autocomplete="off"></div>
+    <div class="field"><label>反代地址（可选）</label><input id="fUpstream" placeholder="如 127.0.0.1:8080，留空仅签发证书" autocomplete="off"></div>
+    <div class="foot">
+      <button class="btn" id="btnCancel" type="button">取消</button>
+      <button class="btn primary" id="btnSave" type="button">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 账号弹窗 -->
+<div class="mask" id="accountMask">
+  <div class="dialog">
+    <h3>修改管理账号</h3>
+    <div class="field"><label>当前密码</label><input id="accCurrent" type="password" autocomplete="current-password"></div>
+    <div class="field"><label>新用户名</label><input id="accUser" autocomplete="username"></div>
+    <div class="field"><label>新密码（留空则不修改）</label><input id="accPass" type="password" autocomplete="new-password"></div>
+    <div class="field"><label>确认新密码</label><input id="accPass2" type="password" autocomplete="new-password"></div>
+    <p class="msg" id="accMsg"></p>
+    <div class="foot">
+      <button class="btn" id="btnAccCancel" type="button">取消</button>
+      <button class="btn primary" id="btnAccSave" type="button">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var API = 'api/ssl-console';
+  var TOKEN_KEY = 'ssl.console.token';
+  var cache = [];
+  var editing = null;
+  var currentUser = 'admin';
+  var $ = function (id) { return document.getElementById(id); };
+  var token = function () { try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; } };
+  var setToken = function (value) {
+    try { if (value) localStorage.setItem(TOKEN_KEY, value); else localStorage.removeItem(TOKEN_KEY); } catch (e) {}
+  };
+
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function msg(text, bad) { var n = $('msg'); n.textContent = text || ''; n.className = 'msg' + (bad ? ' bad' : ''); }
+  function statusText(s) { return { valid: '有效', pending: '待申请', expired: '已过期', error: '读取失败' }[s] || '待申请'; }
+
+  function request(path, options) {
+    var opts = options || {};
+    var headers = Object.assign({}, opts.headers || {});
+    if (token()) headers.Authorization = 'Bearer ' + token();
+    return fetch(API + path, Object.assign({}, opts, { headers: headers, cache: 'no-store' }))
+      .then(function (r) {
+        if (r.status === 401) {
+          logout(true);
+          throw new Error('登录已失效，请重新登录');
+        }
+        return r.json().then(function (data) { return { ok: r.ok, data: data }; });
+      });
+  }
+
+  function showLogin() {
+    $('mainView').hidden = true;
+    ddnsLoaded = false;
+    $('loginView').hidden = false;
+    $('loginMsg').textContent = '';
+    $('loginPass').value = '';
+    $('loginUser').value = currentUser || 'admin';
+  }
+
+  function switchTab(name) {
+    var ddns = name === 'ddns';
+    var et = name === 'et';
+    var backup = name === 'backup';
+    $('tabSsl').classList.toggle('active', !ddns && !et && !backup);
+    $('tabDdns').classList.toggle('active', ddns);
+    $('tabEt').classList.toggle('active', et);
+    $('tabBackup').classList.toggle('active', backup);
+    $('sslPanel').hidden = ddns || et || backup;
+    $('ddnsPanel').hidden = !ddns;
+    $('etPanel').hidden = !et;
+    $('backupPanel').hidden = !backup;
+    if (ddns && !ddnsLoaded) {
+      loadDdns();
+      ddnsLoaded = true;
+    }
+    if (et) {
+      loadEt(!etLoaded);
+      etLoaded = true;
+      if (!etTimer) {
+        etTimer = setInterval(function () {
+          if (!document.hidden && !$('etPanel').hidden) loadEt(false);
+        }, 5000);
+      }
+    }
+    if (backup && !backupLoaded) {
+      loadBackup();
+      backupLoaded = true;
+    }
+  }
+
+  var etLoaded = false;
+  var etTimer = null;
+
+  function fmtUptime(sec) {
+    sec = Number(sec) || 0;
+    var d = Math.floor(sec / 86400);
+    var h = Math.floor((sec % 86400) / 3600);
+    var m = Math.floor((sec % 3600) / 60);
+    if (d) return d + ' 天 ' + h + ' 小时';
+    if (h) return h + ' 小时 ' + m + ' 分';
+    return m + ' 分 ' + (sec % 60) + ' 秒';
+  }
+
+  function renderEt(data, populate) {
+    var st = (data && data.status) || {};
+    var cfg = (data && data.config) || {};
+    if (st.running) {
+      $('etStatus').innerHTML = '状态：<b>运行中</b> · pid ' + st.pid + ' · 已运行 ' + fmtUptime(st.uptime);
+    } else {
+      $('etStatus').innerHTML = '状态：<b class="off">已停止</b>';
+    }
+    if (populate) {
+      $('etHostname').value = cfg.hostname || '';
+      $('etNetwork').value = cfg.networkName || '';
+      $('etSecret').value = cfg.networkSecret || '';
+      $('etIpv4').value = cfg.ipv4 || '';
+      $('etListeners').value = cfg.listeners || '11010';
+      $('etPeers').value = cfg.peers || '';
+      $('etPrivate').checked = cfg.privateMode !== false;
+    }
+    var logs = (data && data.logs) || [];
+    var box = $('etLogs');
+    box.textContent = logs.length ? logs.join('\n') : '暂无日志';
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function loadEt(populate) {
+    request('/easytier').then(function (res) {
+      if (!res.ok) throw new Error((res.data && res.data.message) || '读取失败');
+      renderEt(res.data, !!populate);
+    }).catch(function (e) { $('etMsg').textContent = e.message; });
+  }
+
+  function etForm() {
+    return {
+      hostname: $('etHostname').value.trim(),
+      networkName: $('etNetwork').value.trim(),
+      networkSecret: $('etSecret').value,
+      ipv4: $('etIpv4').value.trim(),
+      listeners: $('etListeners').value.trim(),
+      peers: $('etPeers').value.trim(),
+      privateMode: $('etPrivate').checked
+    };
+  }
+
+  function etSave() {
+    $('btnEtSave').disabled = true;
+    request('/easytier', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(etForm())
+    }).then(function (res) {
+      if (!res.ok) throw new Error((res.data && res.data.message) || '保存失败');
+      renderEt(res.data, false);
+      $('etMsg').textContent = '已保存并启动';
+    }).catch(function (e) {
+      $('etMsg').textContent = e.message;
+    }).then(function () { $('btnEtSave').disabled = false; });
+  }
+
+  function etAction(action) {
+    request('/easytier/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: action })
+    }).then(function (res) {
+      if (!res.ok) throw new Error((res.data && res.data.message) || '操作失败');
+      renderEt(res.data, false);
+      $('etMsg').textContent = action === 'stop' ? '已停止' : '已重启';
+    }).catch(function (e) {
+      $('etMsg').textContent = e.message;
+    });
+  }
+
+  var ddnsCache = [];
+  var ddnsInterval = 300;
+  var ddnsLoaded = false;
+  var ddnsProviders = [];
+
+  function ddnsMsg(text, bad) { var n = $('ddnsMsg'); n.textContent = text || ''; n.className = 'msg' + (bad ? ' bad' : ''); }
+
+  function fmtTime(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    var p = function (n) { return String(n).padStart(2, '0'); };
+    return (d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+
+  function renderDdns() {
+    $('ddnsSummary').textContent = ddnsCache.length
+      ? '共 ' + ddnsCache.length + ' 条记录，每 ' + Math.max(1, Math.round(ddnsInterval / 60)) + ' 分钟自动检查一次'
+      : '还没有配置，填写后保存即开始更新';
+    var box = $('ddnsList');
+    if (!ddnsCache.length) {
+      box.innerHTML = '<div class="empty">还没有配置</div>';
+      return;
+    }
+    box.innerHTML = ddnsCache.map(function (item) {
+      var badge;
+      if (item.lastOk) badge = '<span class="badge valid">正常</span>';
+      else if (item.lastAt) badge = '<span class="badge error">失败</span>';
+      else badge = '<span class="badge pending">未运行</span>';
+      var meta = [item.providerLabel, item.type, 'TTL ' + item.ttl];
+      if (item.lastIp) meta.push('IP ' + item.lastIp);
+      if (item.lastAction) meta.push(item.lastAction);
+      if (item.lastAt) meta.push(fmtTime(item.lastAt));
+      return '<div class="row">'
+        + '<div class="main"><b>' + esc(item.record) + '</b>' + badge
+        + '<span class="meta">' + esc(meta.join(' · ')) + '</span>'
+        + (item.lastError ? '<span class="err">' + esc(item.lastError) + '</span>' : '')
+        + '</div></div>';
+    }).join('');
+  }
+
+  function loadDdnsLogs() {
+    return request('/ddns/logs').then(function (res) {
+      if (!res.ok) return;
+      var logs = (res.data && res.data.logs) || [];
+      var box = $('ddnsLogs');
+      box.textContent = logs.length ? logs.join('\n') : '暂无日志';
+      box.scrollTop = box.scrollHeight;
+    }).catch(function () {});
+  }
+
+  function loadDdns() {
+    return ddnsLoadProviders().then(function () {
+      return request('/ddns/config');
+    }).then(function (res) {
+      if (!res.ok) throw new Error((res.data && res.data.message) || '读取失败');
+      fillDdnsForm(res);
+      return loadDdnsLogs();
+    }).catch(function (e) { ddnsMsg(e.message, true); });
+  }
+
+  function ddnsLoadProviders() {
+    if (ddnsProviders.length) return Promise.resolve();
+    return request('/ddns/providers').then(function (res) {
+      if (res.ok) ddnsProviders = (res.data && res.data.providers) || [];
+    });
+  }
+
+  function metaOf(id) {
+    for (var i = 0; i < ddnsProviders.length; i++) {
+      if (ddnsProviders[i].id === id) return ddnsProviders[i];
+    }
+    return null;
+  }
+
+  function ddnsGroupHtml() {
+    var opts = ddnsProviders.map(function (p) {
+      return '<option value="' + esc(p.id) + '">' + esc(p.label) + '</option>';
+    }).join('');
+    return '<div class="ddns-group collapsed">'
+      + '<div class="ddns-group-head">'
+      + '<button class="g-toggle" type="button"><span class="g-arrow">▸</span><b class="g-title">服务商</b><span class="g-sub"></span></button>'
+      + '<span class="g-head-right"><select class="g-provider">' + opts + '</select></span></div>'
+      + '<div class="ddns-body">'
+      + '<div class="ddns-grid">'
+      + '<div class="field"><label class="g-key-label">API Key</label><input class="g-key" autocomplete="off"></div>'
+      + '<div class="field g-secret-field"><label class="g-secret-label">API Secret</label><input class="g-secret" type="password" autocomplete="new-password"></div>'
+      + '</div>'
+      + '<div class="ddns-grid">'
+      + '<div class="field"><label>IPv4 地址（可选，留空自动获取）</label><input class="g-ipv4" placeholder="留空自动获取公网 IPv4" autocomplete="off"></div>'
+      + '<div class="field"><label>IPv6 地址（可选，留空自动获取）</label><input class="g-ipv6" placeholder="留空自动获取公网 IPv6" autocomplete="off"></div>'
+      + '</div>'
+      + '<div class="ddns-grid">'
+      + '<div class="field"><label>IPv4 域名（每行一个）</label><textarea class="ddns-text g-domains4" spellcheck="false" placeholder="example.com&#10;www.example.com"></textarea></div>'
+      + '<div class="field"><label>IPv6 域名（每行一个，不需要可留空）</label><textarea class="ddns-text g-domains6" spellcheck="false" placeholder="ipv6.example.com"></textarea></div>'
+      + '</div>'
+      + '<div class="ddns-body-foot"><button class="btn danger g-remove" type="button">删除此服务商</button>'
+      + '<button class="btn primary g-save" type="button">保存并更新</button></div>'
+      + '</div></div>';
+  }
+
+  function updateGroupTitle(box) {
+    var meta = metaOf(groupProvider(box));
+    var names = (box.querySelector('.g-domains4').value + '\n' + box.querySelector('.g-domains6').value)
+      .split(/\r?\n/)
+      .map(function (v) { return v.trim(); })
+      .filter(Boolean);
+    box.querySelector('.g-title').textContent = meta ? meta.label : '服务商';
+    box.querySelector('.g-sub').textContent = names.length
+      ? names[0] + (names.length > 1 ? ' 等 ' + names.length + ' 条' : '')
+      : '未填写域名';
+  }
+
+  function groupProvider(box) {
+    var sel = box.querySelector('.g-provider');
+    return sel ? sel.value : (box.dataset.provider || '');
+  }
+
+  function applyGroupMeta(box) {
+    var meta = metaOf(groupProvider(box));
+    if (!meta) return;
+    box.querySelector('.g-key-label').textContent = meta.keyLabel || 'API Key';
+    box.querySelector('.g-secret-label').textContent = meta.secretLabel || 'API Secret';
+    box.querySelector('.g-secret-field').hidden = !meta.needsSecret;
+    box.querySelector('.g-key').placeholder = meta.keyHint || '';
+  }
+
+  function addDdnsGroup(data, expand) {
+    var d = data || {};
+    var holder = document.createElement('div');
+    holder.innerHTML = ddnsGroupHtml();
+    var box = holder.firstChild;
+    box.dataset.id = d.id || '';
+    box.classList.toggle('collapsed', !expand);
+    var provider = d.provider || (ddnsProviders[0] && ddnsProviders[0].id) || 'aliyun';
+    box.dataset.provider = provider;
+    box.querySelector('.g-provider').value = provider;
+    box.querySelector('.g-key').value = d.key || '';
+    box.querySelector('.g-secret').value = d.secret || '';
+    box.querySelector('.g-ipv4').value = (d.ipv4 && d.ipv4.address) || '';
+    box.querySelector('.g-ipv6').value = (d.ipv6 && d.ipv6.address) || '';
+    box.querySelector('.g-domains4').value = (d.ipv4 && d.ipv4.domains) || '';
+    box.querySelector('.g-domains6').value = (d.ipv6 && d.ipv6.domains) || '';
+    // 已保存的服务商固定显示名称，不再提供下拉选择
+    if (d.id) {
+      var sel = box.querySelector('.g-provider');
+      var meta = metaOf(provider);
+      var label = document.createElement('span');
+      label.className = 'g-provider-text';
+      label.textContent = meta ? meta.label : provider;
+      sel.parentNode.replaceChild(label, sel);
+    }
+    box.querySelector('.g-toggle').onclick = function () {
+      box.classList.toggle('collapsed');
+    };
+    var select = box.querySelector('.g-provider');
+    if (select) {
+      select.onchange = function () {
+        box.dataset.provider = select.value;
+        box.querySelector('.g-key').value = '';
+        box.querySelector('.g-secret').value = '';
+        applyGroupMeta(box);
+        updateGroupTitle(box);
+      };
+    }
+    box.querySelector('.g-domains4').oninput = function () { updateGroupTitle(box); };
+    box.querySelector('.g-domains6').oninput = function () { updateGroupTitle(box); };
+    applyGroupMeta(box);
+    updateGroupTitle(box);
+    $('ddnsGroups').appendChild(box);
+  }
+
+  function fillDdnsForm(res) {
+    var d = (res && res.data) || {};
+    $('ddnsGroups').innerHTML = '';
+    var groups = d.groups || [];
+    if (!groups.length) addDdnsGroup({}, true);
+    else groups.forEach(function (g) { addDdnsGroup(g, false); });
+    ddnsCache = d.tasks || [];
+    ddnsInterval = d.interval || 300;
+    renderDdns();
+  }
+
+  function collectDdnsGroups() {
+    var boxes = $('ddnsGroups').querySelectorAll('.ddns-group');
+    var out = [];
+    for (var i = 0; i < boxes.length; i++) {
+      var box = boxes[i];
+      out.push({
+        id: box.dataset.id || '',
+        provider: groupProvider(box),
+        key: box.querySelector('.g-key').value,
+        secret: box.querySelector('.g-secret').value,
+        ipv4: { address: box.querySelector('.g-ipv4').value, domains: box.querySelector('.g-domains4').value },
+        ipv6: { address: box.querySelector('.g-ipv6').value, domains: box.querySelector('.g-domains6').value }
+      });
+    }
+    return out;
+  }
+
+  function ddnsBody() {
+    return JSON.stringify({ groups: collectDdnsGroups() });
+  }
+
+  function saveDdnsConfig(index, btn) {
+    if (btn) { btn.disabled = true; btn.textContent = '保存中…'; }
+    request('/ddns/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: ddnsBody()
+    }).then(function (res) {
+      if (!res.ok) throw new Error((res.data && res.data.message) || '保存失败');
+      var saved = res.data;
+      var gid = (saved.groups && saved.groups[index] && saved.groups[index].id) || '';
+      return request('/ddns/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groupId: gid })
+      }).then(function (run) { return { saved: saved, run: run }; });
+    }).then(function (x) {
+      var data = x.run.ok ? x.run.data : x.saved;
+      if (!data.interval) data.interval = ddnsInterval;
+      fillDdnsForm({ data: data });
+      var box = $('ddnsGroups').children[index];
+      if (box) box.classList.remove('collapsed');
+      loadDdnsLogs();
+      var bad = (data.tasks || []).filter(function (t) { return t.lastError; }).length;
+      ddnsMsg(bad ? '已保存，其中 ' + bad + ' 条更新失败' : '已保存并更新完成', !!bad);
+    }).catch(function (e) {
+      ddnsMsg(e.message, true);
+    }).then(function () {
+      if (btn) { btn.disabled = false; btn.textContent = '保存并更新'; }
+    });
+  }
+
+  function ddnsRunAll() {
+    ddnsMsg('正在更新全部记录…');
+    $('btnDdnsRunAll').disabled = true;
+    request('/ddns/run', { method: 'POST' }).then(function (res) {
+      if (!res.ok) throw new Error((res.data && res.data.message) || '更新失败');
+      ddnsCache = (res.data && res.data.tasks) || [];
+      renderDdns();
+      loadDdnsLogs();
+      var bad = ddnsCache.filter(function (t) { return t.lastError; }).length;
+      ddnsMsg(bad ? '完成，' + bad + ' 条失败' : '全部更新完成', !!bad);
+    }).catch(function (e) { ddnsMsg(e.message, true); })
+      .then(function () { $('btnDdnsRunAll').disabled = false; });
+  }
+
+  /* --------------------------- 备份与恢复 --------------------------- */
+
+  var backupLoaded = false;
+
+  function backupMsg(text, bad) { var n = $('backupMsg'); n.textContent = text || ''; n.className = 'msg' + (bad ? ' bad' : ''); }
+  function qiniuMsg(text, bad) { var n = $('qiniuMsg'); n.textContent = text || ''; n.className = 'msg' + (bad ? ' bad' : ''); }
+  function qiniuListMsg(text, bad) { var n = $('qiniuListMsg'); n.textContent = text || ''; n.className = 'msg' + (bad ? ' bad' : ''); }
+
+  function fmtSize(bytes) {
+    bytes = Number(bytes) || 0;
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1048576).toFixed(2) + ' MB';
+  }
+
+  function loadBackup() {
+    request('/backup/config').then(function (res) {
+      if (!res.ok) throw new Error((res.data && res.data.message) || '读取失败');
+      var d = res.data || {};
+      $('qiniuAK').value = d.accessKey || '';
+      $('qiniuSK').value = '';
+      $('qiniuBucket').value = d.bucket || '';
+      $('qiniuDomain').value = d.domain || '';
+      $('qiniuPrefix').value = d.prefix || 'ssl-console-backup/';
+      // 区域下拉
+      var sel = $('qiniuRegion');
+      sel.innerHTML = (d.regions || []).map(function (r) {
+        return '<option value="' + esc(r.id) + '" data-iovip="' + esc(r.iovip) + '">' + esc(r.label) + '</option>';
+      }).join('');
+      sel.value = d.region || 'z0';
+      updateQiniuDomainHint();
+    }).catch(function (e) { qiniuMsg(e.message, true); });
+  }
+
+  function updateQiniuDomainHint() {
+    var sel = $('qiniuRegion');
+    var opt = sel.options[sel.selectedIndex];
+    var iovip = opt ? opt.getAttribute('data-iovip') : '';
+    $('qiniuDomain').placeholder = '未绑定 CDN 域名时可填：' + (iovip || 'iovip-z0.qiniuio.com');
+  }
+
+  function backupExport() {
+    backupMsg('正在生成备份…');
+    fetch(API + '/backup/export', { headers: token() ? { Authorization: 'Bearer ' + token() } : {} })
+      .then(function (r) {
+        if (r.status === 401) { logout(true); throw new Error('登录已失效'); }
+        if (!r.ok) return r.text().then(function (t) { throw new Error('导出失败：' + t); });
+        return r.blob().then(function (blob) {
+          var cd = r.headers.get('Content-Disposition') || '';
+          var m = cd.match(/filename="?([^";]+)"?/);
+          var name = m ? m[1] : 'ssl-console-backup.tar.gz';
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement('a');
+          a.href = url; a.download = name;
+          document.body.appendChild(a); a.click();
+          document.body.removeChild(a);
+          setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+          backupMsg('已导出：' + name);
+        });
+      }).catch(function (e) { backupMsg(e.message, true); });
+  }
+
+  function backupImport() {
+    var file = $('backupFile').files[0];
+    if (!file) { backupMsg('请先选择备份文件', true); return; }
+    backupMsg('正在导入并恢复…');
+    var reader = new FileReader();
+    reader.onload = function () {
+      fetch(API + '/backup/import', {
+        method: 'POST',
+        headers: Object.assign({ 'Content-Type': 'application/octet-stream' }, token() ? { Authorization: 'Bearer ' + token() } : {}),
+        body: reader.result
+      }).then(function (r) {
+        if (r.status === 401) { logout(true); throw new Error('登录已失效'); }
+        return r.json().then(function (d) { return { ok: r.ok, data: d }; });
+      }).then(function (res) {
+        if (!res.ok) throw new Error((res.data && res.data.message) || '导入失败');
+        var files = (res.data && res.data.restoredFiles) || [];
+        backupMsg('恢复完成，共 ' + files.length + ' 个文件。建议刷新页面以加载新配置。', false);
+      }).catch(function (e) { backupMsg(e.message, true); });
+    };
+    reader.onerror = function () { backupMsg('读取文件失败', true); };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function qiniuSave() {
+    qiniuMsg('正在保存…');
+    var body = JSON.stringify({
+      accessKey: $('qiniuAK').value,
+      secretKey: $('qiniuSK').value,
+      bucket: $('qiniuBucket').value,
+      domain: $('qiniuDomain').value,
+      prefix: $('qiniuPrefix').value,
+      region: $('qiniuRegion').value
+    });
+    request('/backup/config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: body })
+      .then(function (res) {
+        if (!res.ok) throw new Error((res.data && res.data.message) || '保存失败');
+        var d = res.data || {};
+        $('qiniuAK').value = d.accessKey || '';
+        $('qiniuSK').value = '';
+        $('qiniuBucket').value = d.bucket || '';
+        $('qiniuDomain').value = d.domain || '';
+        $('qiniuPrefix').value = d.prefix || '';
+        $('qiniuRegion').value = d.region || 'z0';
+        qiniuMsg('配置已保存');
+      }).catch(function (e) { qiniuMsg(e.message, true); });
+  }
+
+  function qiniuUpload() {
+    qiniuListMsg('正在打包并上传到七牛云…');
+    request('/backup/qiniu/upload', { method: 'POST' }).then(function (res) {
+      if (!res.ok) throw new Error((res.data && res.data.message) || '上传失败');
+      qiniuListMsg('已上传：' + res.data.key + '（' + fmtSize(res.data.size) + '）');
+      qiniuList();
+    }).catch(function (e) { qiniuListMsg(e.message, true); });
+  }
+
+  function qiniuList() {
+    qiniuListMsg('正在读取七牛云备份列表…');
+    request('/backup/qiniu/list').then(function (res) {
+      if (!res.ok) throw new Error((res.data && res.data.message) || '读取失败');
+      renderQiniuList((res.data && res.data.items) || []);
+      qiniuListMsg('');
+    }).catch(function (e) {
+      $('qiniuList').innerHTML = '<div class="empty">读取失败</div>';
+      qiniuListMsg(e.message, true);
+    });
+  }
+
+  function renderQiniuList(items) {
+    var box = $('qiniuList');
+    if (!items.length) { box.innerHTML = '<div class="empty">七牛云中暂无备份</div>'; return; }
+    box.innerHTML = items.map(function (it) {
+      var t = it.putTime ? new Date(it.putTime).toLocaleString('zh-CN') : '';
+      return '<div class="row"><div class="main"><b>' + esc(it.key.replace(/^.*\//, '')) + '</b>'
+        + '<span class="meta">' + t + ' · ' + fmtSize(it.size) + '</span></div>'
+        + '<div class="actions"><button class="btn qiniu-restore" data-key="' + esc(it.key) + '">恢复</button></div></div>';
+    }).join('');
+  }
+
+  function qiniuRestore(key) {
+    if (!confirm('确定从七牛云恢复该备份吗？当前配置将被覆盖。')) return;
+    qiniuListMsg('正在下载并恢复…');
+    request('/backup/qiniu/restore', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: key })
+    }).then(function (res) {
+      if (!res.ok) throw new Error((res.data && res.data.message) || '恢复失败');
+      var files = (res.data && res.data.restoredFiles) || [];
+      qiniuListMsg('恢复完成，共 ' + files.length + ' 个文件。建议刷新页面。', false);
+    }).catch(function (e) { qiniuListMsg(e.message, true); });
+  }
+
+  function showMain(username) {
+    currentUser = username || 'admin';
+    $('currentUser').textContent = currentUser;
+    $('loginView').hidden = true;
+    $('mainView').hidden = false;
+    switchTab('ssl');
+    load();
+  }
+
+  function logout(silent) {
+    if (!silent && token()) request('/logout', { method: 'POST' }).catch(function () {});
+    setToken('');
+    showLogin();
+  }
+
+  function login() {
+    var username = $('loginUser').value.trim();
+    var password = $('loginPass').value;
+    if (!username || !password) { $('loginMsg').textContent = '请输入用户名和密码'; return; }
+    $('btnLogin').disabled = true;
+    fetch(API + '/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: username, password: password })
+    }).then(function (r) {
+      return r.json().then(function (data) { return { ok: r.ok, data: data }; });
+    }).then(function (res) {
+      if (!res.ok) throw new Error((res.data && res.data.message) || '登录失败');
+      setToken(res.data.token);
+      showMain(res.data.username || username);
+    }).catch(function (e) {
+      $('loginMsg').textContent = e.message;
+    }).then(function () { $('btnLogin').disabled = false; });
+  }
+
+  function render() {
+    var list = $('list');
+    $('summary').textContent = cache.length ? '共 ' + cache.length + ' 个域名' : '暂无域名';
+    if (!cache.length) { list.innerHTML = '<div class="empty">暂无域名，请点击“添加域名”</div>'; return; }
+    list.innerHTML = cache.map(function (item) {
+      var expiry = item.notAfter || '尚未签发';
+      var days = item.daysLeft == null ? '' : '（剩余 ' + item.daysLeft + ' 天）';
+      return '<div class="row">'
+        + '<div class="main"><b>' + esc(item.domain) + '</b>'
+        + '<span class="badge ' + esc(item.status || 'pending') + '">' + statusText(item.status) + '</span>'
+        + '<span class="meta">到期：' + esc(expiry) + esc(days) + (item.upstream ? ' · 反代：' + esc(item.upstream) : '') + (item.remark ? ' · ' + esc(item.remark) : '') + '</span></div>'
+        + '<div class="actions">'
+        + '<button class="btn" data-edit="' + esc(item.domain) + '" type="button">编辑</button>'
+        + '<button class="btn danger" data-del="' + esc(item.domain) + '" type="button">删除</button>'
+        + '</div></div>';
+    }).join('');
+  }
+
+  function load() {
+    msg('');
+    request('/domains').then(function (res) {
+      if (!res.ok) throw new Error((res.data && res.data.message) || '读取失败');
+      cache = (res.data && res.data.domains) || [];
+      render();
+    }).catch(function (e) { msg(e.message, true); });
+  }
+
+  function openDialog(item) {
+    editing = item || null;
+    $('dlgTitle').textContent = editing ? '编辑域名' : '添加域名';
+    $('fDomain').value = editing ? editing.domain : '';
+    $('fRemark').value = editing ? (editing.remark || '') : '';
+    $('fUpstream').value = editing ? (editing.upstream || '') : '';
+    $('mask').classList.add('show');
+    $('fDomain').focus();
+  }
+
+  function closeDialog() { $('mask').classList.remove('show'); editing = null; }
+
+  function save() {
+    var payload = {
+      originalDomain: editing ? editing.domain : '',
+      domain: $('fDomain').value.trim(),
+      remark: $('fRemark').value.trim(),
+      upstream: $('fUpstream').value.trim()
+    };
+    if (!payload.domain) { msg('请填写域名', true); return; }
+    $('btnSave').disabled = true;
+    request('/domains', {
+      method: editing ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function (res) {
+      if (!res.ok) throw new Error((res.data && res.data.message) || '保存失败');
+      cache = (res.data && res.data.domains) || [];
+      render();
+      closeDialog();
+      msg(editing ? '域名已更新，证书将自动申请' : '域名已添加，证书将自动申请');
+    }).catch(function (e) { msg(e.message, true); })
+      .then(function () { $('btnSave').disabled = false; });
+  }
+
+  function remove(domain) {
+    if (!window.confirm('确定删除域名“' + domain + '”吗？删除后该域名的 HTTPS 证书将不再续期。')) return;
+    request('/domains?domain=' + encodeURIComponent(domain), { method: 'DELETE' })
+      .then(function (res) {
+        if (!res.ok) throw new Error((res.data && res.data.message) || '删除失败');
+        cache = (res.data && res.data.domains) || [];
+        render();
+        msg('域名已删除');
+      }).catch(function (e) { msg(e.message, true); });
+  }
+
+  function openAccount() {
+    $('accCurrent').value = '';
+    $('accUser').value = currentUser;
+    $('accPass').value = '';
+    $('accPass2').value = '';
+    $('accMsg').textContent = '';
+    $('accountMask').classList.add('show');
+  }
+
+  function saveAccount() {
+    var currentPassword = $('accCurrent').value;
+    var username = $('accUser').value.trim();
+    var newPassword = $('accPass').value;
+    var confirmPassword = $('accPass2').value;
+    if (!currentPassword) { $('accMsg').textContent = '请输入当前密码'; return; }
+    if (newPassword !== confirmPassword) { $('accMsg').textContent = '两次输入的新密码不一致'; return; }
+    $('btnAccSave').disabled = true;
+    request('/account', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword: currentPassword, username: username, newPassword: newPassword, confirmPassword: confirmPassword })
+    }).then(function (res) {
+      if (!res.ok) throw new Error((res.data && res.data.message) || '保存失败');
+      $('accountMask').classList.remove('show');
+      currentUser = (res.data && res.data.username) || username;
+      setToken('');
+      alert('账号已修改，请使用新账号重新登录');
+      showLogin();
+    }).catch(function (e) { $('accMsg').textContent = e.message; })
+      .then(function () { $('btnAccSave').disabled = false; });
+  }
+
+  $('btnLogin').onclick = login;
+  $('loginPass').onkeydown = function (e) { if (e.key === 'Enter') login(); };
+  $('loginUser').onkeydown = function (e) { if (e.key === 'Enter') $('loginPass').focus(); };
+  $('btnRefresh').onclick = load;
+  $('btnAdd').onclick = function () { openDialog(null); };
+  $('btnCancel').onclick = closeDialog;
+  $('btnSave').onclick = save;
+  $('btnLogout').onclick = function () { logout(false); };
+  $('btnAccount').onclick = openAccount;
+  $('tabSsl').onclick = function () { switchTab('ssl'); };
+  $('tabDdns').onclick = function () { switchTab('ddns'); };
+  $('tabEt').onclick = function () { switchTab('et'); };
+  $('tabBackup').onclick = function () { switchTab('backup'); };
+  $('btnBackupExport').onclick = backupExport;
+  $('btnBackupImport').onclick = backupImport;
+  $('btnQiniuSave').onclick = qiniuSave;
+  $('btnQiniuUpload').onclick = qiniuUpload;
+  $('btnQiniuList').onclick = qiniuList;
+  $('qiniuRegion').onchange = updateQiniuDomainHint;
+  $('qiniuList').onclick = function (event) {
+    if (event.target.classList.contains('qiniu-restore')) {
+      qiniuRestore(event.target.getAttribute('data-key'));
+    }
+  };
+  $('btnEtRefresh').onclick = function () { loadEt(false); };
+  $('btnEtSave').onclick = etSave;
+  $('btnEtRestart').onclick = function () { etAction('restart'); };
+  $('btnEtStop').onclick = function () { etAction('stop'); };
+  $('btnDdnsRunAll').onclick = ddnsRunAll;
+  $('btnDdnsAdd').onclick = function () { addDdnsGroup({}, true); };
+  $('ddnsGroups').onclick = function (event) {
+    var box = event.target.closest('.ddns-group');
+    if (event.target.classList.contains('g-remove')) {
+      if (box) box.parentNode.removeChild(box);
+      return;
+    }
+    if (event.target.classList.contains('g-save') && box) {
+      var index = Array.prototype.indexOf.call($('ddnsGroups').children, box);
+      saveDdnsConfig(index, event.target);
+    }
+  };
+  $('btnAccCancel').onclick = function () { $('accountMask').classList.remove('show'); };
+  $('btnAccSave').onclick = saveAccount;
+  $('list').onclick = function (event) {
+    var edit = event.target.getAttribute('data-edit');
+    if (edit) { openDialog(cache.filter(function (i) { return i.domain === edit; })[0] || null); return; }
+    var del = event.target.getAttribute('data-del');
+    if (del) remove(del);
+  };
+  $('mask').onclick = function (event) { if (event.target === $('mask')) closeDialog(); };
+  $('accountMask').onclick = function (event) { if (event.target === $('accountMask')) $('accountMask').classList.remove('show'); };
+
+  if (token()) {
+    request('/auth').then(function (res) {
+      if (!res.ok) throw new Error('unauthorized');
+      showMain(res.data.username);
+    }).catch(function () { showLogin(); });
+  } else {
+    showLogin();
+  }
+})();
+</script>
+</body>
+</html>

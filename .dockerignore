@@ -1,0 +1,10 @@
+data
+console-data
+ddns-go
+config
+.git
+*.tar.gz
+*.zip
+服务器登录信息.md
+deploy.sh
+*.md

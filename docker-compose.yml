@@ -1,0 +1,46 @@
+services:
+  # Caddy + 证书控制台 + DDNS（内置）+ EasyTier，全部在一个容器内
+  console:
+    build: .
+    image: meeko-console:latest
+    container_name: meeko-console
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    ports:
+      - "443:443"
+      - "443:443/udp"
+      - "9443:9443"
+      - "11010:11010/tcp"
+      - "11010:11010/udp"
+      - "11011:11011/tcp"
+      - "11011:11011/udp"
+      - "11012:11012/tcp"
+      - "11012:11012/udp"
+    environment:
+      TZ: Asia/Shanghai
+      PORT: "9600"
+      DATA_DIR: /console-data
+      CADDY_DATA: /data
+      CADDY_SNIPPET: /etc/caddy/domains.caddy
+      CADDYFILE: /etc/caddy/Caddyfile
+      STATIC_DIR: /app/admin
+      DDNS_INTERVAL: "300"
+      # 管理后台账号密码：请通过宿主机环境变量或 .env 文件设置，切勿把真实密码写死在此处
+      CONSOLE_USER: ${CONSOLE_USER:-admin}
+      CONSOLE_PASS: ${CONSOLE_PASS:-admin}
+    volumes:
+      - ./console-data:/console-data
+      - ./data:/data
+      - ./domains.caddy:/etc/caddy/domains.caddy
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

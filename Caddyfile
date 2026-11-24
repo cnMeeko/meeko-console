@@ -1,0 +1,17 @@
+# SSL 证书管理控制台
+# Caddy 自动向 Let's Encrypt 申请并续期免费证书（90 天有效，到期前自动续期）
+# 9443 端口根路径为证书控制台，DDNS 与 EasyTier 都在控制台内配置
+{
+	# 需要接收证书到期提醒时可填写邮箱，默认留空
+	# email admin@example.com
+	admin 0.0.0.0:2019
+}
+
+# 控制台与 Caddy 在同一个容器内，直接走本机回环
+:9443 {
+	encode gzip
+	reverse_proxy 127.0.0.1:9600
+}
+
+# 控制台维护的域名（由内置后端自动生成，请勿手工修改）
+import /etc/caddy/domains.caddy
