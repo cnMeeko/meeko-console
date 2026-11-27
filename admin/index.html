@@ -103,6 +103,8 @@
   .nps-sw.on .track i { left:18px; }
   .nps-sw:disabled { opacity:.5; cursor:wait; }
   .nps-cid { font-weight:600; color:var(--primary); }
+  .nps-online { margin-left:8px; }
+  .nps-online + .nps-sw { margin-left:10px; }
 </style>
 </head>
 <body>
@@ -901,6 +903,7 @@
     npsLoaded = true;
     // 操作成功后回填配置输入框，避免一直显示占位提示
     renderNps(true);
+    npsPollOnline();
   }
 
   function loadNps(populate) {
@@ -912,6 +915,8 @@
       npsLoaded = true;
       renderNps(populate !== false);
       npsMsg('');
+      if (!npsOnlineTimer) npsOnlineTimer = setInterval(npsPollOnline, 15000);
+      npsPollOnline();
     }).catch(function (e) {
       $('npsStatus').innerHTML = '状态：<b class="off">读取失败</b> · ' + esc(e.message);
       npsMsg('读取失败：' + e.message + '（可点「刷新状态」重试）', true);
@@ -984,7 +989,11 @@
     box.innerHTML = list.map(function (c) {
       var meta = ['ID ' + c.id, 'vkey ' + c.vkey, '隧道 ' + c.tunnelCount + ' 条', '最大连接 ' + (c.maxConn || '不限')];
       if (c.maxTunnelNum) meta.push('最大隧道 ' + c.maxTunnelNum);
+      if (c.addr) meta.push('来源 ' + c.addr);
+      if (c.clientVersion) meta.push('版本 ' + c.clientVersion);
+      if (c.nowConn) meta.push('当前连接 ' + c.nowConn);
       return '<div class="row"><div class="main"><b>' + esc(c.remark) + '</b>'
+        + npsOnlineBadge(c.connected)
         + npsSwitch(c.status, 'data-npc-status="' + c.id + '"', '点击' + (c.status ? '停用' : '启用') + '该客户端')
         + '<span class="meta">' + esc(meta.join(' · ')) + '</span>'
         + '<span class="meta">' + esc(npsCommand(c)) + '</span></div>'
@@ -994,6 +1003,38 @@
         + '<button class="btn danger" data-npc-del="' + c.id + '" type="button">删除</button>'
         + '</div></div>';
     }).join('');
+  }
+
+  // 在线 / 离线：connected 为 null 表示面板还没拿到 NPS 的实时数据
+  function npsOnlineBadge(connected) {
+    if (connected === true) return '<span class="badge valid nps-online">● 在线</span>';
+    if (connected === false) return '<span class="badge expired nps-online">● 离线</span>';
+    return '<span class="badge pending nps-online">检测中…</span>';
+  }
+
+  // 轮询 NPS 实时状态，只刷新客户端列表里的在线标识
+  var npsOnlineTimer = null;
+  function npsPollOnline() {
+    if (!$('npsPanel') || $('npsPanel').hidden || !npsLoaded) return;
+    request('/nps/online').then(function (res) {
+      if (!res.ok) return;
+      var data = res.data || {};
+      var rows = data.clients || [];
+      var map = {};
+      rows.forEach(function (r) { map[Number(r.id)] = r; });
+      ((npsState && npsState.clients) || []).forEach(function (c) {
+        var r = map[Number(c.id)];
+        c.connected = r ? !!r.online : (data.running === false ? false : null);
+        if (r) {
+          c.addr = r.addr || '';
+          c.clientVersion = r.version || '';
+          c.nowConn = r.nowConn || 0;
+        } else {
+          c.addr = ''; c.clientVersion = ''; c.nowConn = 0;
+        }
+      });
+      renderNpsClients();
+    }).catch(function () {});
   }
 
   // 状态开关：启用 / 停用，点一下就切换（后端会改 NPS 记录并重启进程）
