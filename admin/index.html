@@ -80,6 +80,21 @@
   .login-box .btn { width:100%; margin-top:6px; }
   .account-line { font-size:13px; color:var(--muted); }
   .account-line b { color:#1e2a3d; }
+  .edition { display:inline-block; margin-left:8px; padding:1px 8px; border-radius:999px; background:#eef4ff; color:var(--primary); font-size:12px; vertical-align:middle; }
+  .nt-wrap { overflow-x:auto; }
+  .nt { width:100%; border-collapse:collapse; font-size:13px; }
+  .nt th, .nt td { padding:8px 8px; border-bottom:1px solid var(--line); text-align:left; white-space:nowrap; }
+  .nt th { color:#64748b; font-weight:500; font-size:12.5px; background:#fafbfd; }
+  .nt td.wrap { white-space:normal; word-break:break-all; min-width:120px; }
+  .nt input[type="checkbox"] { width:auto; height:auto; vertical-align:middle; }
+  .nt .btn { padding:4px 10px; font-size:12.5px; margin-right:6px; }
+  .nt tr:hover td { background:#fafcff; }
+  .nt-empty { padding:22px 0; text-align:center; color:var(--muted); }
+  .nps-toolbar { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+  .nps-toolbar b { font-size:14px; }
+  .nps-toolbar .btns { display:flex; gap:8px; flex-wrap:wrap; }
+  .nps-toolbar .btn { padding:6px 12px; font-size:13px; }
+  .nps-chip { display:inline-block; margin-right:6px; padding:1px 7px; border-radius:6px; background:#eef4ff; color:var(--primary); font-size:12px; }
 </style>
 </head>
 <body>
@@ -98,7 +113,7 @@
   <div id="mainView" hidden>
     <div class="toolbar">
       <div>
-        <h1>Meeko面板管理</h1>
+        <h1>Meeko面板管理<span class="edition" id="editionBadge" hidden>服务端版</span></h1>
         <p class="desc" style="margin:0">证书由服务器上的 Caddy 自动向 Let's Encrypt 申请并续期（90 天）。添加或修改域名后自动生效。</p>
       </div>
       <div class="account-line">
@@ -112,6 +127,7 @@
       <button class="tab active" id="tabSsl" type="button">SSL 证书</button>
       <button class="tab" id="tabDdns" type="button">DDNS 动态解析</button>
       <button class="tab" id="tabEt" type="button">EasyTier 组网</button>
+      <button class="tab" id="tabNps" type="button">NPS 内网穿透</button>
       <button class="tab" id="tabBackup" type="button">备份与恢复</button>
     </div>
 
@@ -188,6 +204,74 @@
         </div>
         <p class="msg" id="etMsg"></p>
         <pre class="et-logs" id="etLogs">加载中…</pre>
+      </div>
+    </div>
+
+    <div id="npsPanel" hidden>
+      <div class="card">
+        <div class="toolbar">
+          <div>
+            <h1 style="font-size:18px">NPS 内网穿透服务端</h1>
+            <p class="desc" style="margin:0">客户端用 vkey 连上桥接端口后，TCP / UDP 隧道把内网端口映射到服务器上。</p>
+          </div>
+          <span>
+            <button class="btn" id="btnNpsRefresh" type="button">刷新状态</button>
+            <button class="btn" id="btnNpsRestart" type="button">重启</button>
+            <button class="btn danger" id="btnNpsStop" type="button">停止</button>
+          </span>
+        </div>
+        <div class="et-status" id="npsStatus">正在读取…</div>
+        <div class="ddns-grid">
+          <div class="field"><label>公网地址（客户端连接用，IP 或域名）</label><input id="npsPublicAddr" placeholder="如 bm35.cn 或 38.147.177.240" autocomplete="off"></div>
+          <div class="field"><label>桥接端口（npc 连接端口）</label><input id="npsBridgePort" placeholder="8024" autocomplete="off"></div>
+        </div>
+        <div class="et-actions">
+          <button class="btn primary" id="btnNpsSaveCfg" type="button">保存配置</button>
+        </div>
+        <p class="msg" id="npsMsg"></p>
+
+        <div class="ddns-sec">
+          <div class="nps-toolbar">
+            <b>客户端</b>
+            <div class="btns"><button class="btn" id="btnNpsAddClient" type="button">添加客户端</button></div>
+          </div>
+          <div id="npsClients"><div class="empty">还没有客户端</div></div>
+        </div>
+
+        <div class="ddns-sec">
+          <div class="nps-toolbar">
+            <b>TCP 隧道</b>
+            <div class="btns">
+              <button class="btn" data-nps-add="tcp" type="button">添加</button>
+              <button class="btn" data-nps-batch-add="tcp" type="button">批量添加</button>
+              <button class="btn" data-nps-batch-edit="tcp" type="button">批量编辑</button>
+              <button class="btn danger" data-nps-batch-del="tcp" type="button">批量删除</button>
+            </div>
+          </div>
+          <div id="npsTcp"><div class="empty">还没有 TCP 隧道</div></div>
+        </div>
+
+        <div class="ddns-sec">
+          <div class="nps-toolbar">
+            <b>UDP 隧道</b>
+            <div class="btns">
+              <button class="btn" data-nps-add="udp" type="button">添加</button>
+              <button class="btn" data-nps-batch-add="udp" type="button">批量添加</button>
+              <button class="btn" data-nps-batch-edit="udp" type="button">批量编辑</button>
+              <button class="btn danger" data-nps-batch-del="udp" type="button">批量删除</button>
+            </div>
+          </div>
+          <div id="npsUdp"><div class="empty">还没有 UDP 隧道</div></div>
+        </div>
+
+        <p class="ddns-hint">
+          批量添加：每行一条 <code>端口 目标地址 备注</code>，例如 <code>9001 127.0.0.1:22 内网 SSH</code>。<br>
+          服务器防火墙需要放行桥接端口与各隧道端口（UDP 隧道同时放行 udp）。
+        </p>
+        <details style="margin-top:14px">
+          <summary style="cursor:pointer;font-size:13px;color:#64748b">NPS 运行日志</summary>
+          <pre class="et-logs" id="npsLogs" style="margin-top:10px">暂无日志</pre>
+        </details>
       </div>
     </div>
 
@@ -271,6 +355,78 @@
   </div>
 </div>
 
+<!-- NPS 客户端弹窗 -->
+<div class="mask" id="npsClientMask">
+  <div class="dialog">
+    <h3 id="npsClientTitle">添加客户端</h3>
+    <div class="field"><label>备注</label><input id="npcRemark" placeholder="如 公司 NAS" autocomplete="off"></div>
+    <div class="field"><label>验证密钥 vkey（留空自动生成）</label><input id="npcVkey" placeholder="字母数字，1-32 位" autocomplete="off"></div>
+    <div class="field"><label>最大连接数（0 不限制）</label><input id="npcMaxConn" value="0" autocomplete="off"></div>
+    <div class="field"><label>最大隧道数（0 不限制）</label><input id="npcMaxTunnel" value="0" autocomplete="off"></div>
+    <div class="foot">
+      <button class="btn" id="btnNpcCancel" type="button">取消</button>
+      <button class="btn primary" id="btnNpcSave" type="button">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- NPS 单条隧道弹窗 -->
+<div class="mask" id="npsTunnelMask">
+  <div class="dialog">
+    <h3 id="npsTunnelTitle">添加 TCP 隧道</h3>
+    <div class="field"><label>所属客户端</label><select id="npTunClient"></select></div>
+    <div class="field"><label>服务器监听 IP</label><input id="npTunServerIp" value="0.0.0.0" autocomplete="off"></div>
+    <div class="field"><label>服务器端口</label><input id="npTunPort" placeholder="如 9001" autocomplete="off"></div>
+    <div class="field"><label>目标地址（内网 IP:端口）</label><input id="npTunTarget" placeholder="如 127.0.0.1:22" autocomplete="off"></div>
+    <div class="field"><label>备注（可选）</label><input id="npTunRemark" placeholder="如 内网 SSH" autocomplete="off"></div>
+    <div class="field"><label>访问密码（可选）</label><input id="npTunPassword" autocomplete="off" placeholder="留空不需要密码"></div>
+    <div class="foot">
+      <button class="btn" id="btnNpTunCancel" type="button">取消</button>
+      <button class="btn primary" id="btnNpTunSave" type="button">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- NPS 批量添加弹窗 -->
+<div class="mask" id="npsBatchAddMask">
+  <div class="dialog" style="max-width:560px">
+    <h3 id="npsBatchAddTitle">批量添加 TCP 隧道</h3>
+    <div class="field"><label>所属客户端</label><select id="npBatchClient"></select></div>
+    <div class="field"><label>每行一条：端口 目标地址 备注（备注可省略）</label>
+      <textarea class="ddns-text" id="npBatchLines" spellcheck="false" style="min-height:140px" placeholder="9001 127.0.0.1:22 内网 SSH&#10;9002 192.168.1.10:3306 数据库"></textarea>
+    </div>
+    <p class="msg" id="npBatchMsg"></p>
+    <div class="foot">
+      <button class="btn" id="btnNpBatchCancel" type="button">取消</button>
+      <button class="btn primary" id="btnNpBatchSave" type="button">开始添加</button>
+    </div>
+  </div>
+</div>
+
+<!-- NPS 批量编辑弹窗 -->
+<div class="mask" id="npsBatchEditMask">
+  <div class="dialog">
+    <h3 id="npsBatchEditTitle">批量编辑 TCP 隧道</h3>
+    <p class="desc" id="npBatchEditCount" style="margin:0 0 12px"></p>
+    <div class="field"><label>所属客户端</label><select id="npEditClient"></select></div>
+    <div class="field"><label>服务器监听 IP（留空不变）</label><input id="npEditServerIp" placeholder="0.0.0.0" autocomplete="off"></div>
+    <div class="field"><label>备注（留空不变）</label><input id="npEditRemark" autocomplete="off"></div>
+    <div class="field"><label>访问密码（留空不变）</label><input id="npEditPassword" autocomplete="off"></div>
+    <div class="field"><label>运行状态</label>
+      <select id="npEditStatus">
+        <option value="">保持不变</option>
+        <option value="1">启用</option>
+        <option value="0">停用</option>
+      </select>
+    </div>
+    <p class="msg" id="npEditMsg"></p>
+    <div class="foot">
+      <button class="btn" id="btnNpEditCancel" type="button">取消</button>
+      <button class="btn primary" id="btnNpEditSave" type="button">保存修改</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function () {
   'use strict';
@@ -319,14 +475,17 @@
   function switchTab(name) {
     var ddns = name === 'ddns';
     var et = name === 'et';
+    var nps = name === 'nps';
     var backup = name === 'backup';
-    $('tabSsl').classList.toggle('active', !ddns && !et && !backup);
+    $('tabSsl').classList.toggle('active', !ddns && !et && !nps && !backup);
     $('tabDdns').classList.toggle('active', ddns);
     $('tabEt').classList.toggle('active', et);
+    $('tabNps').classList.toggle('active', nps);
     $('tabBackup').classList.toggle('active', backup);
-    $('sslPanel').hidden = ddns || et || backup;
+    $('sslPanel').hidden = ddns || et || nps || backup;
     $('ddnsPanel').hidden = !ddns;
     $('etPanel').hidden = !et;
+    $('npsPanel').hidden = !nps;
     $('backupPanel').hidden = !backup;
     if (ddns && !ddnsLoaded) {
       loadDdns();
@@ -340,6 +499,10 @@
           if (!document.hidden && !$('etPanel').hidden) loadEt(false);
         }, 5000);
       }
+    }
+    if (nps && !npsLoaded) {
+      loadNps(true);
+      npsLoaded = true;
     }
     if (backup && !backupLoaded) {
       loadBackup();
@@ -680,6 +843,370 @@
       .then(function () { $('btnDdnsRunAll').disabled = false; });
   }
 
+  /* --------------------------- NPS 内网穿透 --------------------------- */
+
+  var npsLoaded = false;
+  var npsState = null;
+  var npsEditingClient = null;
+  var npsEditingTunnel = null;
+  var npsBatchMode = 'tcp';
+
+  function npsMsg(text, bad) {
+    var n = $('npsMsg');
+    n.textContent = text || '';
+    n.className = 'msg' + (bad ? ' bad' : '');
+  }
+
+  function npBatchMsg(id, text, bad) {
+    var n = $(id);
+    if (!n) return;
+    n.textContent = text || '';
+    n.className = 'msg' + (bad ? ' bad' : '');
+  }
+
+  function applyNpsState(data) {
+    if (!data || !data.tunnels) return;
+    npsState = data;
+    renderNps(false);
+  }
+
+  function npsClientOptions(placeholder) {
+    var list = (npsState && npsState.clients) || [];
+    var head = placeholder ? '<option value="">' + esc(placeholder) + '</option>' : '';
+    return head + list.map(function (c) {
+      return '<option value="' + c.id + '">' + esc(c.remark) + '（#' + c.id + '）</option>';
+    }).join('');
+  }
+
+  function npsClientById(id) {
+    var list = (npsState && npsState.clients) || [];
+    for (var i = 0; i < list.length; i++) if (list[i].id === Number(id)) return list[i];
+    return null;
+  }
+
+  function npsTunnelList(mode) {
+    return (npsState && npsState.tunnels && npsState.tunnels[mode]) || [];
+  }
+
+  function npsTunnelById(id) {
+    var all = npsTunnelList('tcp').concat(npsTunnelList('udp'));
+    for (var i = 0; i < all.length; i++) if (all[i].id === Number(id)) return all[i];
+    return null;
+  }
+
+  function npsCommand(client) {
+    var cfg = (npsState && npsState.config) || {};
+    var addr = (cfg.publicAddr || '').trim() || '<服务器公网地址>';
+    var host = addr.indexOf(':') >= 0 ? addr : addr + ':' + (cfg.bridgePort || 8024);
+    return 'npc -server=' + host + ' -vkey=' + (client.vkey || '') + ' -type=tcp';
+  }
+
+  function renderNps(populate) {
+    var st = (npsState && npsState.status) || {};
+    var cfg = (npsState && npsState.config) || {};
+    if (st.running) {
+      $('npsStatus').innerHTML = '状态：<b>运行中</b> · pid ' + st.pid + ' · 已运行 ' + fmtUptime(st.uptime)
+        + ' · 桥接端口 tcp/' + (cfg.bridgePort || 8024) + ' · 管理页 127.0.0.1:' + cfg.webPort + ' · NPS ' + esc(cfg.version || '');
+    } else {
+      $('npsStatus').innerHTML = '状态：<b class="off">已停止</b> · 桥接端口 tcp/' + (cfg.bridgePort || 8024);
+    }
+    if (populate) {
+      $('npsPublicAddr').value = cfg.publicAddr || '';
+      $('npsBridgePort').value = cfg.bridgePort || 8024;
+    }
+    renderNpsClients();
+    renderNpsTunnels('tcp');
+    renderNpsTunnels('udp');
+    var logs = (npsState && npsState.logs) || [];
+    var box = $('npsLogs');
+    box.textContent = logs.length ? logs.join('\n') : '暂无日志';
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function renderNpsClients() {
+    var list = (npsState && npsState.clients) || [];
+    var box = $('npsClients');
+    if (!list.length) { box.innerHTML = '<div class="empty">还没有客户端，请先添加一个</div>'; return; }
+    box.innerHTML = list.map(function (c) {
+      var meta = ['vkey ' + c.vkey, '隧道 ' + c.tunnelCount + ' 条', '最大连接 ' + (c.maxConn || '不限')];
+      if (c.maxTunnelNum) meta.push('最大隧道 ' + c.maxTunnelNum);
+      return '<div class="row"><div class="main"><b>' + esc(c.remark) + '</b>'
+        + '<span class="badge ' + (c.status ? 'valid' : 'expired') + '">' + (c.status ? '启用' : '停用') + '</span>'
+        + '<span class="meta">' + esc(meta.join(' · ')) + '</span>'
+        + '<span class="meta">' + esc(npsCommand(c)) + '</span></div>'
+        + '<div class="actions">'
+        + '<button class="btn" data-npc-edit="' + c.id + '" type="button">编辑</button>'
+        + '<button class="btn" data-npc-cmd="' + c.id + '" type="button">命令</button>'
+        + '<button class="btn danger" data-npc-del="' + c.id + '" type="button">删除</button>'
+        + '</div></div>';
+    }).join('');
+  }
+
+  function renderNpsTunnels(mode) {
+    var list = npsTunnelList(mode);
+    var box = $(mode === 'tcp' ? 'npsTcp' : 'npsUdp');
+    if (!list.length) {
+      box.innerHTML = '<div class="nt-empty">还没有 ' + mode.toUpperCase() + ' 隧道</div>';
+      return;
+    }
+    box.innerHTML = '<div class="nt-wrap"><table class="nt"><thead><tr>'
+      + '<th style="width:34px"><input type="checkbox" data-check-all="' + mode + '"></th>'
+      + '<th>端口</th><th>目标</th><th>客户端</th><th>备注</th><th>状态</th><th>操作</th>'
+      + '</tr></thead><tbody>'
+      + list.map(function (t) {
+        return '<tr>'
+          + '<td><input type="checkbox" data-check="' + mode + '" value="' + t.id + '"></td>'
+          + '<td>' + esc(t.serverIp) + ':' + t.port + '</td>'
+          + '<td class="wrap">' + esc(t.target) + '</td>'
+          + '<td>' + esc(t.clientRemark) + '</td>'
+          + '<td class="wrap">' + esc(t.remark) + (t.password ? ' <span class="nps-chip">有密码</span>' : '') + '</td>'
+          + '<td>' + (t.status ? '启用' : '停用') + '</td>'
+          + '<td>'
+          + '<button class="btn" data-tun-edit="' + t.id + '" data-mode="' + mode + '" type="button">编辑</button>'
+          + '<button class="btn danger" data-tun-del="' + t.id + '" data-mode="' + mode + '" type="button">删除</button>'
+          + '</td></tr>';
+      }).join('')
+      + '</tbody></table></div>';
+  }
+
+  function npsSelected(mode) {
+    var box = $(mode === 'tcp' ? 'npsTcp' : 'npsUdp');
+    var nodes = box.querySelectorAll('input[data-check="' + mode + '"]:checked');
+    return Array.prototype.map.call(nodes, function (n) { return Number(n.value); });
+  }
+
+  function npsSaveConfig() {
+    var bridgePort = $('npsBridgePort').value.trim();
+    var publicAddr = $('npsPublicAddr').value.trim();
+    npsMsg('正在保存并重启 NPS…');
+    $('btnNpsSaveCfg').disabled = true;
+    request('/nps/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bridgePort: bridgePort, publicAddr: publicAddr })
+    }).then(function (res) {
+      if (!res.ok) throw new Error((res.data && res.data.message) || '保存失败');
+      applyNpsState(res.data);
+      npsMsg('配置已保存');
+    }).catch(function (e) { npsMsg(e.message, true); })
+      .then(function () { $('btnNpsSaveCfg').disabled = false; });
+  }
+
+  function npsAction(action) {
+    if (action === 'stop' && !confirm('停止后所有客户端与隧道都会断开，确定继续？')) return;
+    npsMsg(action === 'stop' ? '正在停止…' : '正在重启…');
+    request('/nps/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: action })
+    }).then(function (res) {
+      if (!res.ok) throw new Error((res.data && res.data.message) || '操作失败');
+      applyNpsState(res.data);
+      npsMsg(action === 'stop' ? 'NPS 已停止' : 'NPS 已重启');
+    }).catch(function (e) { npsMsg(e.message, true); });
+  }
+
+  function openNpsClient(client) {
+    npsEditingClient = client || null;
+    $('npsClientTitle').textContent = npsEditingClient ? '编辑客户端' : '添加客户端';
+    $('npcRemark').value = npsEditingClient ? npsEditingClient.remark : '';
+    $('npcVkey').value = npsEditingClient ? npsEditingClient.vkey : '';
+    $('npcMaxConn').value = npsEditingClient ? npsEditingClient.maxConn : 0;
+    $('npcMaxTunnel').value = npsEditingClient ? (npsEditingClient.maxTunnelNum || 0) : 0;
+    $('npsClientMask').classList.add('show');
+    $('npcRemark').focus();
+  }
+
+  function saveNpsClient() {
+    var payload = {
+      remark: $('npcRemark').value.trim(),
+      vkey: $('npcVkey').value.trim(),
+      maxConn: Number($('npcMaxConn').value || 0),
+      maxTunnelNum: Number($('npcMaxTunnel').value || 0)
+    };
+    if (npsEditingClient) payload.id = npsEditingClient.id;
+    $('btnNpcSave').disabled = true;
+    request('/nps/clients', {
+      method: npsEditingClient ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function (res) {
+      if (!res.ok) throw new Error((res.data && res.data.message) || '保存失败');
+      applyNpsState(res.data);
+      $('npsClientMask').classList.remove('show');
+      npsMsg(npsEditingClient ? '客户端已更新' : '客户端已添加');
+      npsEditingClient = null;
+    }).catch(function (e) { npsMsg(e.message, true); })
+      .then(function () { $('btnNpcSave').disabled = false; });
+  }
+
+  function removeNpsClient(id) {
+    var c = npsClientById(id);
+    if (!confirm('确定删除客户端“' + (c ? c.remark : id) + '”吗？该客户端的隧道也会一起删除。')) return;
+    request('/nps/clients?id=' + id, { method: 'DELETE' }).then(function (res) {
+      if (!res.ok) throw new Error((res.data && res.data.message) || '删除失败');
+      applyNpsState(res.data);
+      npsMsg('客户端已删除');
+    }).catch(function (e) { npsMsg(e.message, true); });
+  }
+
+  function openNpsTunnel(mode, tunnel) {
+    npsBatchMode = mode;
+    npsEditingTunnel = tunnel || null;
+    $('npsTunnelTitle').textContent = (npsEditingTunnel ? '编辑 ' : '添加 ') + mode.toUpperCase() + ' 隧道';
+    $('npTunClient').innerHTML = npsClientOptions();
+    var clientId = npsEditingTunnel ? npsEditingTunnel.clientId : ((npsState.clients[0] || {}).id || '');
+    $('npTunClient').disabled = !!npsEditingTunnel;
+    $('npTunServerIp').value = npsEditingTunnel ? npsEditingTunnel.serverIp : '0.0.0.0';
+    $('npTunPort').value = npsEditingTunnel ? npsEditingTunnel.port : '';
+    $('npTunTarget').value = npsEditingTunnel ? npsEditingTunnel.target : '';
+    $('npTunRemark').value = npsEditingTunnel ? npsEditingTunnel.remark : '';
+    $('npTunPassword').value = npsEditingTunnel ? npsEditingTunnel.password : '';
+    if (clientId) $('npTunClient').value = String(clientId);
+    $('npsTunnelMask').classList.add('show');
+    $('npTunPort').focus();
+  }
+
+  function saveNpsTunnel() {
+    var port = $('npTunPort').value.trim();
+    var target = $('npTunTarget').value.trim();
+    var serverIp = $('npTunServerIp').value.trim() || '0.0.0.0';
+    var remark = $('npTunRemark').value.trim();
+    var password = $('npTunPassword').value;
+    var clientId = $('npTunClient').value;
+    if (!port) { npsMsg('请填写服务器端口', true); return; }
+    if (!target) { npsMsg('请填写目标地址', true); return; }
+    if (!npsEditingTunnel && !clientId) { npsMsg('请先添加客户端', true); return; }
+    $('btnNpTunSave').disabled = true;
+    var edit = npsEditingTunnel;
+    var req = edit
+      ? request('/nps/tunnels', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ids: [edit.id],
+          patch: { port: port, target: target, serverIp: serverIp, remark: remark, password: password }
+        })
+      })
+      : request('/nps/tunnels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: npsBatchMode,
+          clientId: clientId,
+          items: [{ port: port, target: target, serverIp: serverIp, remark: remark, password: password }]
+        })
+      });
+    req.then(function (res) {
+      if (!res.ok) throw new Error((res.data && res.data.message) || '保存失败');
+      if (edit) {
+        applyNpsState(res.data);
+        npsMsg('隧道已更新');
+      } else {
+        var failed = (res.data && res.data.failed) || [];
+        applyNpsState(res.data && res.data.state);
+        npsMsg(failed.length ? failed[0].message : '隧道已添加（' + (res.data.added || 0) + ' 条）', failed.length > 0);
+      }
+      $('npsTunnelMask').classList.remove('show');
+      npsEditingTunnel = null;
+    }).catch(function (e) { npsMsg(e.message, true); })
+      .then(function () { $('btnNpTunSave').disabled = false; });
+  }
+
+  function openNpsBatchAdd(mode) {
+    npsBatchMode = mode;
+    $('npsBatchAddTitle').textContent = '批量添加 ' + mode.toUpperCase() + ' 隧道';
+    $('npBatchClient').innerHTML = npsClientOptions();
+    $('npBatchLines').value = '';
+    npBatchMsg('npBatchMsg', '');
+    $('npsBatchAddMask').classList.add('show');
+    $('npBatchLines').focus();
+  }
+
+  function saveNpsBatchAdd() {
+    var clientId = $('npBatchClient').value;
+    if (!clientId) { npBatchMsg('npBatchMsg', '请先添加客户端', true); return; }
+    var lines = $('npBatchLines').value.split(/\r?\n/).map(function (v) { return v.trim(); }).filter(Boolean);
+    if (!lines.length) { npBatchMsg('npBatchMsg', '请至少填写一行', true); return; }
+    var items = [];
+    var bad = [];
+    lines.forEach(function (line) {
+      var parts = line.split(/\s+/);
+      if (parts.length < 2) { bad.push(line); return; }
+      items.push({ port: parts[0], target: parts[1], remark: parts.slice(2).join(' ') });
+    });
+    if (bad.length) {
+      npBatchMsg('npBatchMsg', '格式不对：' + bad.join('；'), true);
+      return;
+    }
+    $('btnNpBatchSave').disabled = true;
+    npBatchMsg('npBatchMsg', '正在添加 ' + items.length + ' 条…');
+    request('/nps/tunnels', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: npsBatchMode, clientId: clientId, items: items })
+    }).then(function (res) {
+      if (!res.ok) throw new Error((res.data && res.data.message) || '批量添加失败');
+      applyNpsState(res.data && res.data.state);
+      var failed = (res.data && res.data.failed) || [];
+      var text = '成功添加 ' + (res.data.added || 0) + ' 条' + (failed.length ? '，失败 ' + failed.length + ' 条：' + failed.map(function (f) { return (f.port || '') + ' ' + f.message; }).join('；') : '');
+      npBatchMsg('npBatchMsg', text, failed.length > 0);
+      npsMsg(text, failed.length > 0);
+      if (!failed.length) $('npsBatchAddMask').classList.remove('show');
+    }).catch(function (e) { npBatchMsg('npBatchMsg', e.message, true); })
+      .then(function () { $('btnNpBatchSave').disabled = false; });
+  }
+
+  function openNpsBatchEdit(mode) {
+    var ids = npsSelected(mode);
+    if (!ids.length) { npsMsg('请先勾选要修改的隧道', true); return; }
+    npsBatchMode = mode;
+    $('npsBatchEditTitle').textContent = '批量编辑 ' + mode.toUpperCase() + ' 隧道';
+    $('npBatchEditCount').textContent = '已选中 ' + ids.length + ' 条隧道，留空的项保持不变';
+    $('npEditClient').innerHTML = npsClientOptions('保持不变');
+    $('npEditServerIp').value = '';
+    $('npEditRemark').value = '';
+    $('npEditPassword').value = '';
+    $('npEditStatus').value = '';
+    $('npEditMsg').textContent = '';
+    $('npsBatchEditMask').classList.add('show');
+  }
+
+  function saveNpsBatchEdit() {
+    var ids = npsSelected(npsBatchMode);
+    if (!ids.length) { $('npEditMsg').textContent = '没有选中隧道'; return; }
+    var patch = {};
+    if ($('npEditClient').value) patch.clientId = $('npEditClient').value;
+    if ($('npEditServerIp').value.trim()) patch.serverIp = $('npEditServerIp').value.trim();
+    if ($('npEditRemark').value.trim()) patch.remark = $('npEditRemark').value.trim();
+    if ($('npEditPassword').value) patch.password = $('npEditPassword').value;
+    if ($('npEditStatus').value !== '') patch.status = $('npEditStatus').value === '1';
+    if (!Object.keys(patch).length) { $('npEditMsg').textContent = '没有需要修改的内容'; return; }
+    $('btnNpEditSave').disabled = true;
+    request('/nps/tunnels', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: ids, patch: patch })
+    }).then(function (res) {
+      if (!res.ok) throw new Error((res.data && res.data.message) || '批量修改失败');
+      applyNpsState(res.data);
+      $('npsBatchEditMask').classList.remove('show');
+      npsMsg('已批量修改 ' + ids.length + ' 条隧道');
+    }).catch(function (e) { $('npEditMsg').textContent = e.message; })
+      .then(function () { $('btnNpEditSave').disabled = false; });
+  }
+
+  function batchDeleteNpsTunnels(mode) {
+    var ids = npsSelected(mode);
+    if (!ids.length) { npsMsg('请先勾选要删除的隧道', true); return; }
+    if (!confirm('确定删除选中的 ' + ids.length + ' 条 ' + mode.toUpperCase() + ' 隧道吗？')) return;
+    request('/nps/tunnels?ids=' + ids.join(','), { method: 'DELETE' }).then(function (res) {
+      if (!res.ok) throw new Error((res.data && res.data.message) || '删除失败');
+      applyNpsState(res.data);
+      npsMsg('已删除 ' + ids.length + ' 条隧道');
+    }).catch(function (e) { npsMsg(e.message, true); });
+  }
+
   /* --------------------------- 备份与恢复 --------------------------- */
 
   var backupLoaded = false;
@@ -835,9 +1362,10 @@
     }).catch(function (e) { qiniuListMsg(e.message, true); });
   }
 
-  function showMain(username) {
+  function showMain(username, edition) {
     currentUser = username || 'admin';
     $('currentUser').textContent = currentUser;
+    $('editionBadge').hidden = edition !== 'server';
     $('loginView').hidden = true;
     $('mainView').hidden = false;
     switchTab('ssl');
@@ -864,7 +1392,7 @@
     }).then(function (res) {
       if (!res.ok) throw new Error((res.data && res.data.message) || '登录失败');
       setToken(res.data.token);
-      showMain(res.data.username || username);
+      showMain(res.data.username || username, res.data.edition);
     }).catch(function (e) {
       $('loginMsg').textContent = e.message;
     }).then(function () { $('btnLogin').disabled = false; });
@@ -987,7 +1515,74 @@
   $('tabSsl').onclick = function () { switchTab('ssl'); };
   $('tabDdns').onclick = function () { switchTab('ddns'); };
   $('tabEt').onclick = function () { switchTab('et'); };
+  $('tabNps').onclick = function () { switchTab('nps'); };
   $('tabBackup').onclick = function () { switchTab('backup'); };
+
+  /* NPS */
+  $('btnNpsRefresh').onclick = function () { loadNps(false); };
+  $('btnNpsSaveCfg').onclick = npsSaveConfig;
+  $('btnNpsRestart').onclick = function () { npsAction('restart'); };
+  $('btnNpsStop').onclick = function () { npsAction('stop'); };
+  $('btnNpsAddClient').onclick = function () { openNpsClient(null); };
+  $('btnNpcCancel').onclick = function () { $('npsClientMask').classList.remove('show'); npsEditingClient = null; };
+  $('btnNpcSave').onclick = saveNpsClient;
+  $('btnNpTunCancel').onclick = function () { $('npsTunnelMask').classList.remove('show'); npsEditingTunnel = null; };
+  $('btnNpTunSave').onclick = saveNpsTunnel;
+  $('btnNpBatchCancel').onclick = function () { $('npsBatchAddMask').classList.remove('show'); };
+  $('btnNpBatchSave').onclick = saveNpsBatchAdd;
+  $('btnNpEditCancel').onclick = function () { $('npsBatchEditMask').classList.remove('show'); };
+  $('btnNpEditSave').onclick = saveNpsBatchEdit;
+  $('npsClientMask').onclick = function (e) { if (e.target === $('npsClientMask')) { $('npsClientMask').classList.remove('show'); npsEditingClient = null; } };
+  $('npsTunnelMask').onclick = function (e) { if (e.target === $('npsTunnelMask')) { $('npsTunnelMask').classList.remove('show'); npsEditingTunnel = null; } };
+  $('npsBatchAddMask').onclick = function (e) { if (e.target === $('npsBatchAddMask')) $('npsBatchAddMask').classList.remove('show'); };
+  $('npsBatchEditMask').onclick = function (e) { if (e.target === $('npsBatchEditMask')) $('npsBatchEditMask').classList.remove('show'); };
+  $('npsPanel').onclick = function (event) {
+    var t = event.target;
+    var clientEdit = t.getAttribute('data-npc-edit');
+    if (clientEdit) { openNpsClient(npsClientById(clientEdit)); return; }
+    var clientDel = t.getAttribute('data-npc-del');
+    if (clientDel) { removeNpsClient(clientDel); return; }
+    var clientCmd = t.getAttribute('data-npc-cmd');
+    if (clientCmd) {
+      var c = npsClientById(clientCmd);
+      if (c) {
+        var cmd = npsCommand(c);
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(cmd).then(function () { npsMsg('命令已复制：' + cmd); }, function () { window.prompt('复制下面的连接命令', cmd); });
+        } else {
+          window.prompt('复制下面的连接命令', cmd);
+        }
+      }
+      return;
+    }
+    var add = t.getAttribute('data-nps-add');
+    if (add) { openNpsTunnel(add, null); return; }
+    var batchAdd = t.getAttribute('data-nps-batch-add');
+    if (batchAdd) { openNpsBatchAdd(batchAdd); return; }
+    var batchEdit = t.getAttribute('data-nps-batch-edit');
+    if (batchEdit) { openNpsBatchEdit(batchEdit); return; }
+    var batchDel = t.getAttribute('data-nps-batch-del');
+    if (batchDel) { batchDeleteNpsTunnels(batchDel); return; }
+    var tunEdit = t.getAttribute('data-tun-edit');
+    if (tunEdit) { openNpsTunnel(t.getAttribute('data-mode'), npsTunnelById(tunEdit)); return; }
+    var tunDel = t.getAttribute('data-tun-del');
+    if (tunDel) {
+      if (!confirm('确定删除这条隧道吗？')) return;
+      request('/nps/tunnels?ids=' + tunDel, { method: 'DELETE' }).then(function (res) {
+        if (!res.ok) throw new Error((res.data && res.data.message) || '删除失败');
+        applyNpsState(res.data);
+        npsMsg('隧道已删除');
+      }).catch(function (e) { npsMsg(e.message, true); });
+      return;
+    }
+  };
+  $('npsPanel').addEventListener('change', function (event) {
+    var mode = event.target.getAttribute('data-check-all');
+    if (!mode) return;
+    var box = $(mode === 'tcp' ? 'npsTcp' : 'npsUdp');
+    var nodes = box.querySelectorAll('input[data-check="' + mode + '"]');
+    Array.prototype.forEach.call(nodes, function (n) { n.checked = event.target.checked; });
+  });
   $('btnBackupExport').onclick = backupExport;
   $('btnBackupImport').onclick = backupImport;
   $('btnQiniuSave').onclick = qiniuSave;
@@ -1030,7 +1625,7 @@
   if (token()) {
     request('/auth').then(function (res) {
       if (!res.ok) throw new Error('unauthorized');
-      showMain(res.data.username);
+      showMain(res.data.username, res.data.edition);
     }).catch(function () { showLogin(); });
   } else {
     showLogin();

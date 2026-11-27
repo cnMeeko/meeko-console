@@ -35,6 +35,9 @@ services:
       # 管理后台账号密码：请通过宿主机环境变量或 .env 文件设置，切勿把真实密码写死在此处
       CONSOLE_USER: ${CONSOLE_USER:-admin}
       CONSOLE_PASS: ${CONSOLE_PASS:-admin}
+      # NPS 内网穿透：桥接端口初始值（面板里可改），自带管理页只监听回环
+      NPS_BRIDGE_PORT: ${NPS_BRIDGE_PORT:-8024}
+      NPS_WEB_PORT: "18080"
     volumes:
       - ./console-data:/console-data
       - ./data:/data

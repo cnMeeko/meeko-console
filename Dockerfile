@@ -3,6 +3,8 @@ ARG EASYTIER_IMAGE=easytier/easytier:latest
 ARG CADDY_IMAGE=caddy:2.8-alpine
 ARG NODE_IMAGE=node:20-alpine
 ARG ALPINE_IMAGE=alpine:3.23
+# NPS 服务端版本（ehang-io/nps release）
+ARG NPS_VERSION=0.26.10
 
 FROM ${CADDY_IMAGE} AS caddy
 FROM ${EASYTIER_IMAGE} AS easytier
@@ -12,18 +14,31 @@ FROM ${NODE_IMAGE} AS node
 FROM ${ALPINE_IMAGE}
 
 # 版本号由 CI 读取 VERSION 文件传入，本地构建时用默认值
-ARG VERSION=0.2.4
+ARG VERSION=0.3.0
+# 镜像角色标识：本镜像内置 Caddy / EasyTier / NPS 服务端，属于装在服务器上的服务端版
+ARG EDITION=server
+ARG TARGETARCH=amd64
 LABEL org.opencontainers.image.title="meeko-console" \
-      org.opencontainers.image.description="Meeko 面板 — SSL 证书 + DDNS + EasyTier 一体化控制台" \
+      org.opencontainers.image.description="Meeko 面板（服务端版）— SSL 证书 + DDNS + EasyTier + NPS 一体化控制台" \
       org.opencontainers.image.source="https://github.com/cnMeeko/meeko-console" \
       org.opencontainers.image.version="${VERSION}" \
-      org.opencontainers.image.licenses="MIT"
+      org.opencontainers.image.licenses="MIT" \
+      meeko.edition="${EDITION}" \
+      meeko.role="server"
 
 # node 需要 musl 动态库（libstdc++、libgcc），ca-certificates 供 HTTPS 调用
-RUN apk add --no-cache libstdc++ libgcc ca-certificates tzdata \
+# NPS 服务端二进制按目标架构从官方 release 下载，只保留 nps 本体（不需要它的自带 Web UI）
+# NPS 只认「二进制所在目录下的 conf/」，所以把 /opt/nps/conf 指向持久化数据卷
+RUN apk add --no-cache libstdc++ libgcc ca-certificates tzdata curl tar \
     && cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
     && echo "Asia/Shanghai" > /etc/timezone \
-    && apk del tzdata
+    && mkdir -p /opt/nps /console-data/nps/conf \
+    && curl -fsSL -o /tmp/nps.tar.gz "https://github.com/ehang-io/nps/releases/download/v${NPS_VERSION}/linux_${TARGETARCH}_server.tar.gz" \
+    && tar -xzf /tmp/nps.tar.gz -C /opt/nps \
+    && rm -rf /opt/nps/web /opt/nps/conf /tmp/nps.tar.gz \
+    && chmod +x /opt/nps/nps \
+    && ln -sfn /console-data/nps/conf /opt/nps/conf \
+    && apk del tzdata curl tar
 
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=caddy /usr/bin/caddy /usr/local/bin/caddy
@@ -37,7 +52,8 @@ RUN sed -i 's/\r$//' /app/entrypoint.sh \
     && chmod +x /app/entrypoint.sh /usr/local/bin/caddy /usr/local/bin/easytier-core \
     && node --version \
     && caddy version \
-    && (easytier-core --version || true)
+    && (easytier-core --version || true) \
+    && /opt/nps/nps -version
 
 ENV PORT=9600 \
     HOST=127.0.0.1 \
@@ -48,7 +64,13 @@ ENV PORT=9600 \
     XDG_DATA_HOME=/data \
     XDG_CONFIG_HOME=/data/caddy-config \
     STATIC_DIR=/app/admin \
-    DDNS_INTERVAL=300
+    DDNS_INTERVAL=300 \
+    MEEKO_EDITION=server \
+    VERSION=${VERSION} \
+    NPS_BIN=/opt/nps/nps \
+    NPS_VERSION=${NPS_VERSION} \
+    NPS_WEB_PORT=18080 \
+    NPS_BRIDGE_PORT=8024
 
-EXPOSE 443 443/udp 9443
+EXPOSE 443 443/udp 9443 8024 8024/udp
 CMD ["/app/entrypoint.sh"]

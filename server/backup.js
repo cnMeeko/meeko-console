@@ -30,6 +30,9 @@ const DEFAULT_REGION = 'z0';
 // 需要备份的控制台数据文件（相对 DATA_DIR）
 const DATA_FILES = ['account.json', 'domains.json', 'ddns.json', 'qiniu.json'];
 const ET_DIR_REL = 'easytier';
+// NPS 服务端数据：客户端、TCP/UDP 隧道、面板侧的桥接配置
+const NPS_DIR_REL = 'nps';
+const NPS_FILES = ['panel.json', path.join('conf', 'nps.conf'), path.join('conf', 'clients.json'), path.join('conf', 'tasks.json'), path.join('conf', 'hosts.json')];
 
 /* --------------------------- 七牛云签名 --------------------------- */
 
@@ -164,6 +167,12 @@ function collectBackupFiles() {
   });
   const etFile = path.join(DATA_DIR, ET_DIR_REL, 'config.json');
   if (fs.existsSync(etFile)) items.push({ src: etFile, name: 'data/' + ET_DIR_REL + '/config.json' });
+  NPS_FILES.forEach(function (rel) {
+    const src = path.join(DATA_DIR, NPS_DIR_REL, rel);
+    if (fs.existsSync(src)) {
+      items.push({ src: src, name: 'data/' + NPS_DIR_REL + '/' + String(rel).split(path.sep).join('/') });
+    }
+  });
   if (fs.existsSync(CADDY_SNIPPET)) items.push({ src: CADDY_SNIPPET, name: 'caddy/domains.caddy' });
   return items;
 }

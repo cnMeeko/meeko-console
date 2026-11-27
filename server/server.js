@@ -9,6 +9,7 @@ const crypto = require('crypto');
 const { spawn } = require('child_process');
 const ddns = require('./ddns');
 const backup = require('./backup');
+const nps = require('./nps');
 
 const PORT = Number(process.env.PORT || 9600);
 const HOST = process.env.HOST || '127.0.0.1';
@@ -22,6 +23,9 @@ const INIT_PASS = process.env.CONSOLE_PASS || 'admin';
 
 const API_PREFIX = '/api/ssl-console';
 const TOKEN_TTL = 7 * 24 * 60 * 60 * 1000;
+// 镜像角色标识：本镜像自带 Caddy / EasyTier / NPS 服务端，是"装在服务器上"的版本
+const EDITION = process.env.MEEKO_EDITION || 'server';
+const VERSION = process.env.VERSION || '0.3.0';
 const ACCOUNT_FILE = path.join(DATA_DIR, 'account.json');
 const DOMAINS_FILE = path.join(DATA_DIR, 'domains.json');
 
@@ -254,7 +258,7 @@ function domainPayload(body) {
 }
 
 async function handle(req, res, route, url) {
-  if (route === '/health' && req.method === 'GET') return send(res, 200, { ok: true });
+  if (route === '/health' && req.method === 'GET') return send(res, 200, { ok: true, edition: EDITION, version: VERSION });
 
   if (route === '/login' && req.method === 'POST') {
     const body = await readBody(req);
@@ -266,7 +270,7 @@ async function handle(req, res, route, url) {
     const token = crypto.randomBytes(24).toString('hex');
     sessions.set(token, { username: acc.username, expires: Date.now() + TOKEN_TTL });
     res.setHeader('Set-Cookie', 'ssl_console=' + token + '; Path=/; HttpOnly; SameSite=Lax; Max-Age=' + Math.floor(TOKEN_TTL / 1000));
-    return send(res, 200, { token: token, username: acc.username });
+    return send(res, 200, { token: token, username: acc.username, edition: EDITION, version: VERSION });
   }
 
   const username = currentUser(req);
@@ -279,7 +283,7 @@ async function handle(req, res, route, url) {
   }
 
   if (route === '/auth' && req.method === 'GET') {
-    return send(res, 200, { username: username });
+    return send(res, 200, { username: username, edition: EDITION, version: VERSION });
   }
 
   if (route === '/ddns/providers' && req.method === 'GET') {
@@ -428,6 +432,90 @@ async function handle(req, res, route, url) {
     return send(res, 200, { username: nextUser });
   }
 
+  /* ------------------------------ NPS ------------------------------ */
+
+  if (route === '/nps' && req.method === 'GET') {
+    return send(res, 200, nps.state());
+  }
+
+  if (route === '/nps/config' && req.method === 'PUT') {
+    const body = await readBody(req);
+    try {
+      return send(res, 200, await nps.saveConfig(body));
+    } catch (e) {
+      return send(res, 400, { message: e.message });
+    }
+  }
+
+  if (route === '/nps/action' && req.method === 'POST') {
+    const body = await readBody(req);
+    try {
+      if (body.action === 'stop') {
+        await nps.stop();
+      } else if (body.action === 'start' || body.action === 'restart') {
+        await nps.restart();
+      } else {
+        return send(res, 400, { message: '未知操作' });
+      }
+    } catch (e) {
+      return send(res, 500, { message: e.message });
+    }
+    return send(res, 200, nps.state());
+  }
+
+  if (route === '/nps/clients' && req.method === 'POST') {
+    const body = await readBody(req);
+    try {
+      return send(res, 200, await nps.addClients(body.items || body));
+    } catch (e) {
+      return send(res, 400, { message: e.message });
+    }
+  }
+
+  if (route === '/nps/clients' && req.method === 'PUT') {
+    const body = await readBody(req);
+    try {
+      return send(res, 200, await nps.updateClient(body));
+    } catch (e) {
+      return send(res, 400, { message: e.message });
+    }
+  }
+
+  if (route === '/nps/clients' && req.method === 'DELETE') {
+    try {
+      return send(res, 200, await nps.deleteClient(url.searchParams.get('id')));
+    } catch (e) {
+      return send(res, 400, { message: e.message });
+    }
+  }
+
+  if (route === '/nps/tunnels' && req.method === 'POST') {
+    const body = await readBody(req);
+    try {
+      const r = await nps.addTunnels(body);
+      return send(res, 200, r);
+    } catch (e) {
+      return send(res, 400, { message: e.message });
+    }
+  }
+
+  if (route === '/nps/tunnels' && req.method === 'PUT') {
+    const body = await readBody(req);
+    try {
+      return send(res, 200, await nps.updateTunnels(body));
+    } catch (e) {
+      return send(res, 400, { message: e.message });
+    }
+  }
+
+  if (route === '/nps/tunnels' && req.method === 'DELETE') {
+    try {
+      return send(res, 200, await nps.deleteTunnels(url.searchParams.get('ids') || url.searchParams.get('id')));
+    } catch (e) {
+      return send(res, 400, { message: e.message });
+    }
+  }
+
   /* ------------------------------ 备份 ------------------------------ */
 
   if (route === '/backup/config' && req.method === 'GET') {
@@ -459,6 +547,7 @@ async function handle(req, res, route, url) {
     const buf = await readRawBody(req, 20 * 1024 * 1024);
     try {
       const result = backup.restoreBackupBuffer(buf);
+      await nps.reload().catch(function () {});
       return send(res, 200, { meta: result.meta, restoredFiles: result.restoredFiles });
     } catch (e) {
       return send(res, 400, { message: e.message });
@@ -492,6 +581,7 @@ async function handle(req, res, route, url) {
     if (!key) return send(res, 400, { message: '缺少备份文件名' });
     try {
       const result = await backup.restoreFromQiniu(key);
+      await nps.reload().catch(function () {});
       return send(res, 200, { meta: result.meta, restoredFiles: result.restoredFiles });
     } catch (e) {
       return send(res, 500, { message: e.message });
@@ -739,6 +829,14 @@ if (etBoot.enabled) {
 // 容器启动后开始 DDNS 定时检查
 ddns.start();
 
+// NPS 服务端：先生成配置，再拉起进程
+nps.ensureConf();
+setTimeout(function () {
+  nps.bootStart().catch(function (e) {
+    console.error('[console] NPS 启动失败:', e.message);
+  });
+}, 800);
+
 server.listen(PORT, HOST, function () {
-  console.log('[console] SSL 证书管理服务已启动，监听 ' + HOST + ':' + PORT);
+  console.log('[console] Meeko 面板服务已启动（' + EDITION + ' 版），监听 ' + HOST + ':' + PORT);
 });

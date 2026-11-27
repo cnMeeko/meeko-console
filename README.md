@@ -4,9 +4,16 @@
 [![release](https://img.shields.io/github/v/release/cnMeeko/meeko-console?label=release&color=brightgreen)](https://github.com/cnMeeko/meeko-console/releases)
 [![build](https://github.com/cnMeeko/meeko-console/actions/workflows/docker-build.yml/badge.svg)](https://github.com/cnMeeko/meeko-console/actions/workflows/docker-build.yml)
 
-一个容器搞定 **SSL 证书自动签发/续期**、**DDNS 动态解析**、**EasyTier 组网**，全部在同一个 Web 控制台里配置。
+一个容器搞定 **SSL 证书自动签发/续期**、**DDNS 动态解析**、**EasyTier 组网**、**NPS 内网穿透**，全部在同一个 Web 控制台里配置。
 
-基于 Caddy + Node.js，单镜像、单容器，开箱即用。当前版本 **0.2.4**（见 [`VERSION`](./VERSION)，变更记录见 [`CHANGELOG.md`](./CHANGELOG.md)）。
+基于 Caddy + Node.js + NPS，单镜像、单容器，开箱即用。当前版本 **0.3.0**（见 [`VERSION`](./VERSION)，变更记录见 [`CHANGELOG.md`](./CHANGELOG.md)）。
+
+> 本镜像带 `meeko.role=server` / `meeko.edition=server` 标签，是**服务端版**（内置 NPS 服务端、EasyTier 服务端与 Caddy），面相部署在服务器上使用。用 `docker inspect` 可确认：
+
+```bash
+docker inspect ghcr.io/cnmeeko/meeko-console:latest \
+  --format '{{ index .Config.Labels "meeko.role" }} / {{ index .Config.Labels "meeko.edition" }}'
+```
 
 ---
 
@@ -15,7 +22,8 @@
 - **SSL 证书管理**：Caddy 自动向 Let's Encrypt 申请并续期（90 天），支持为每个域名配置反向代理目标。
 - **DDNS 动态解析**：内置支持阿里云、腾讯云、Cloudflare、Spaceship，可同时配置多个服务商，IPv4 / IPv6 分别管理。
 - **EasyTier 组网**：内置 EasyTier 服务端，控制台内可配置主机名、网络、密码、虚拟 IP、监听端口等。
-- **备份与恢复**：支持本地导入/导出配置，以及七牛云 Kodo 对象存储备份（含区域选择）。
+- **NPS 内网穿透**：内置 NPS 服务端（0.26.x），客户端用 vkey 连上桥接端口后，把内网 TCP / UDP 服务映射到服务器；隧道支持批量添加、批量编辑、批量删除。
+- **备份与恢复**：支持本地导入/导出配置，以及七牛云 Kodo 对象存储备份（含区域选择），NPS 的客户端与隧道数据一并备份。
 - **零预置数据**：首次启动不含任何默认域名或 DDNS 记录，避免信息泄露。
 
 ---
@@ -129,6 +137,9 @@ docker build \
 | 443 | TCP/UDP | Caddy HTTPS（证书签发与域名反代） |
 | 9443 | TCP | 控制台 Web 入口（Caddy 反代到容器内 Node 9600） |
 | 11010–11012 | TCP/UDP | EasyTier 组网监听端口 |
+| 8024 | TCP | NPS 桥接端口（`npc` 客户端连接用） |
+| 自定 | TCP/UDP | NPS 各隧道端口（TCP 隧道放行 tcp，UDP 隧道放行 udp） |
+| 18080 | TCP | 仅回环：NPS 自带管理页（面板不靠它，不对外开放） |
 | 9600 / 2019 | TCP | 仅回环：Node 后端与 Caddy 管理接口，不对外 |
 
 > host 模式下这些端口直接占用宿主机端口，启动前需确认没有 nginx、caddy、面板等程序占用 443 / 9443。
@@ -144,6 +155,10 @@ docker build \
 | `HOST` | `127.0.0.1` | Node 监听地址，默认仅回环 |
 | `DATA_DIR` | `/console-data` | 控制台数据存储目录 |
 | `CADDY_DATA` | `/data` | Caddy 证书存储目录 |
+| `MEEKO_EDITION` | `server` | 镜像角色标识，服务端版为 `server` |
+| `NPS_BIN` | `/opt/nps/nps` | NPS 服务端二进制路径 |
+| `NPS_BRIDGE_PORT` | `8024` | NPS 桥接端口初始值（面板里可改，改完存 `panel.json`） |
+| `NPS_WEB_PORT` | `18080` | NPS 自带管理页端口（只监听 127.0.0.1） |
 
 > 可复制 `.env.example` 为 `.env` 填写账号密码与镜像源，Compose 会自动读取。
 
@@ -151,7 +166,7 @@ docker build \
 
 | 宿主机路径 | 容器路径 | 说明 |
 |------------|----------|------|
-| `./console-data` | `/console-data` | 账号、域名、DDNS、EasyTier、备份配置 |
+| `./console-data` | `/console-data` | 账号、域名、DDNS、EasyTier、NPS、备份配置 |
 | `./data` | `/data` | Caddy 证书（迁移时务必保留，避免重复签发） |
 | `./domains.caddy` | `/etc/caddy/domains.caddy` | 控制台生成的域名配置 |
 | `./Caddyfile` | `/etc/caddy/Caddyfile` | Caddy 主配置（只读挂载） |
@@ -185,11 +200,38 @@ docker build \
 
 点击「保存并启动」即可。
 
+### NPS 内网穿透
+
+「NPS 内网穿透」标签页分三块：
+
+1. **服务端状态**：显示 NPS 进程、桥接端口、运行日志；可填写**公网地址**（客户端连接用，IP 或域名）和**桥接端口**（默认 `8024`），支持重启 / 停止。
+2. **客户端**：添加时自动生成 vkey；每条客户端都能一键复制连接命令：
+
+```bash
+npc -server=你的公网地址:8024 -vkey=xxxxxx -type=tcp
+```
+
+3. **TCP 隧道 / UDP 隧道**：把服务器端口映射到客户端内网地址（`目标地址` 填 `127.0.0.1:22` 这类**客户端侧**地址）。支持：
+   - 单条添加 / 编辑 / 删除；
+   - **批量添加**：每行 `端口 目标地址 备注`，例如：
+
+     ```
+     9001 127.0.0.1:22 内网 SSH
+     9002 192.168.1.10:3306 数据库
+     ```
+
+   - **批量编辑**：勾选多条后统一改客户端、监听 IP、备注、访问密码、启用状态（留空的项保持不变）；
+   - **批量删除**：勾选后一次删除。
+
+改动保存后面板会自动重启 NPS 进程使配置生效（隧道会短暂中断数秒）。别忘了在防火墙 / 安全组放行桥接端口与各隧道端口。
+
 ### 备份与恢复
 
 在「备份与恢复」标签页：
 - **本地**：导出配置为 `.tar.gz`，或上传备份包恢复
 - **七牛云**：配置 AccessKey / SecretKey / Bucket / 存储区域 / 下载域名后，可上传备份到对象存储并随时恢复
+
+备份内容包含账号、域名、DDNS、EasyTier，以及 NPS 的 `panel.json` / `conf/nps.conf` / `conf/clients.json` / `conf/tasks.json` / `conf/hosts.json`；恢复后 NPS 会自动重启加载新数据。
 
 ---
 
@@ -204,6 +246,8 @@ ghcr.io/cnmeeko/meeko-console:latest
 ```
 
 标签由 CI 按 `VERSION` 文件自动生成，同一个版本号会同时产出四类标签：
+
+构建流水线还会写入服务端标识：构建参数 `EDITION=server`、`NPS_VERSION=<版本>`，镜像标签 `meeko.role=server` / `meeko.edition=server`，所以从 GHCR 拉下来的都是服务端版。
 
 | 标签 | 示例 | 说明 |
 |------|------|------|
@@ -252,6 +296,7 @@ docker tag ghcr.io/cnmeeko/meeko-console:0.3.0 meeko-console:latest
 | `CADDY_IMAGE` | `m.daocloud.io/docker.io/library/caddy:2.8-alpine` |
 | `NODE_IMAGE` | `m.daocloud.io/docker.io/library/node:20-alpine` |
 | `ALPINE_IMAGE` | `m.daocloud.io/docker.io/library/alpine:3.23` |
+| `NPS_VERSION` | `0.26.10`（NPS 服务端版本，默认即此值） |
 
 ---
 

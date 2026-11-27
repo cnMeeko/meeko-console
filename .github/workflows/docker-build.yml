@@ -91,9 +91,11 @@ jobs:
             type=sha,format=short,prefix=sha-
           labels: |
             org.opencontainers.image.title=meeko-console
-            org.opencontainers.image.description=Meeko 面板 — SSL 证书 + DDNS + EasyTier 一体化控制台
+            org.opencontainers.image.description=Meeko 面板（服务端版）— SSL 证书 + DDNS + EasyTier + NPS 一体化控制台
             org.opencontainers.image.version=${{ steps.vars.outputs.version }}
             org.opencontainers.image.licenses=MIT
+            meeko.edition=server
+            meeko.role=server
 
       - name: 构建并推送镜像
         id: push
@@ -109,6 +111,8 @@ jobs:
           # 也方便在仓库 Variables 里一键切到国内加速源（未设置时用官方源）
           build-args: |
             VERSION=${{ steps.vars.outputs.version }}
+            EDITION=server
+            NPS_VERSION=${{ vars.NPS_VERSION || '0.26.10' }}
             EASYTIER_IMAGE=${{ vars.EASYTIER_IMAGE || 'easytier/easytier:latest' }}
             CADDY_IMAGE=${{ vars.CADDY_IMAGE || 'caddy:2.8-alpine' }}
             NODE_IMAGE=${{ vars.NODE_IMAGE || 'node:20-alpine' }}
@@ -220,9 +224,10 @@ jobs:
           set -euo pipefail
           MAJOR_MINOR="${VERSION%.*}"
           {
-            echo "## Meeko 面板 v${VERSION}"
+            echo "## Meeko 面板 v${VERSION}（服务端版）"
             echo ""
-            echo "SSL 证书 + DDNS + EasyTier 一体化控制台，单容器、host 网络模式。"
+            echo "SSL 证书 + DDNS + EasyTier + NPS 内网穿透一体化控制台，单容器、host 网络模式。"
+            echo "镜像带 \`meeko.role=server\` / \`meeko.edition=server\` 标识，可用 \`docker inspect\` 确认是服务端版。"
             echo ""
             echo "### 镜像（多架构：linux/amd64 / linux/arm64）"
             echo ""
@@ -257,6 +262,16 @@ jobs:
             echo "cp .env.example .env   # 先改 CONSOLE_USER / CONSOLE_PASS"
             echo "bash deploy.sh up"
             echo '```'
+            echo ""
+            echo "### 端口（host 网络，需在安全组/防火墙放行）"
+            echo ""
+            echo "| 端口 | 协议 | 用途 |"
+            echo "|------|------|------|"
+            echo "| 443 | tcp | 站点 HTTPS / Caddy |"
+            echo "| 9443 | tcp | Meeko 面板 |"
+            echo "| 11010 | tcp+udp | EasyTier 组网 |"
+            echo "| 8024 | tcp | NPS 桥接端口（npc 客户端连接） |"
+            echo "| 自定 | tcp/udp | NPS 各隧道端口 |"
             echo ""
             echo "### 完整变更"
             echo ""
