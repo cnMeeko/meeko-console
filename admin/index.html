@@ -222,9 +222,10 @@
         </div>
         <div class="et-status" id="npsStatus">正在读取…</div>
         <div class="ddns-grid">
-          <div class="field"><label>公网地址（客户端连接用，IP 或域名）</label><input id="npsPublicAddr" placeholder="如 bm35.cn 或 38.147.177.240" autocomplete="off"></div>
+          <div class="field"><label>公网地址（客户端连接用，IP 或域名）</label><input id="npsPublicAddr" placeholder="留空则自动使用本机公网 IP" autocomplete="off"></div>
           <div class="field"><label>桥接端口（npc 连接端口）</label><input id="npsBridgePort" placeholder="8024" autocomplete="off"></div>
         </div>
+        <p class="desc" id="npsAddrHint" style="margin:6px 0 0"></p>
         <div class="et-actions">
           <button class="btn primary" id="btnNpsSaveCfg" type="button">保存配置</button>
         </div>
@@ -914,6 +915,10 @@
       $('npsPublicAddr').value = cfg.publicAddr || '';
       $('npsBridgePort').value = cfg.bridgePort || 8024;
     }
+    var autoAddr = cfg.autoAddr || '';
+    $('npsAddrHint').innerHTML = cfg.addrCustom
+      ? '当前使用手动地址 ' + esc(cfg.publicAddr || '') + '（清空后保存即恢复自动识别）'
+      : '已自动识别本机公网地址 <b>' + esc(autoAddr || '未识别到') + '</b>（留空即用它，也可改成已解析到该地址的域名）';
     renderNpsClients();
     renderNpsTunnels('tcp');
     renderNpsTunnels('udp');
@@ -978,6 +983,9 @@
   function npsSaveConfig() {
     var bridgePort = $('npsBridgePort').value.trim();
     var publicAddr = $('npsPublicAddr').value.trim();
+    // 与自动识别结果一致时按「空」提交，保持自动跟随本机地址
+    var autoAddr = ((npsState && npsState.config && npsState.config.autoAddr) || '').trim();
+    if (autoAddr && publicAddr === autoAddr) publicAddr = '';
     npsMsg('正在保存并重启 NPS…');
     $('btnNpsSaveCfg').disabled = true;
     request('/nps/config', {

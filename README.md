@@ -6,7 +6,7 @@
 
 一个容器搞定 **SSL 证书自动签发/续期**、**DDNS 动态解析**、**EasyTier 组网**、**NPS 内网穿透**，全部在同一个 Web 控制台里配置。
 
-基于 Caddy + Node.js + NPS，单镜像、单容器，开箱即用。当前版本 **0.3.0**（见 [`VERSION`](./VERSION)，变更记录见 [`CHANGELOG.md`](./CHANGELOG.md)）。
+基于 Caddy + Node.js + NPS，单镜像、单容器，开箱即用。当前版本 **0.3.1**（见 [`VERSION`](./VERSION)，变更记录见 [`CHANGELOG.md`](./CHANGELOG.md)）。
 
 > 本镜像带 `meeko.role=server` / `meeko.edition=server` 标签，是**服务端版**（内置 NPS 服务端、EasyTier 服务端与 Caddy），面相部署在服务器上使用。用 `docker inspect` 可确认：
 
@@ -204,7 +204,7 @@ docker build \
 
 「NPS 内网穿透」标签页分三块：
 
-1. **服务端状态**：显示 NPS 进程、桥接端口、运行日志；可填写**公网地址**（客户端连接用，IP 或域名）和**桥接端口**（默认 `8024`），支持重启 / 停止。
+1. **服务端状态**：显示 NPS 进程、桥接端口、运行日志；**公网地址留空时自动读取本机公网 IP**（先取网卡地址，取不到再用外网探测，结果缓存在 `console-data/nps/server-addr.txt`），也可填成已解析到该地址的域名；桥接端口默认 `8024`，支持重启 / 停止。需要固定覆盖时设环境变量 `NPS_PUBLIC_ADDR`。
 2. **客户端**：添加时自动生成 vkey；每条客户端都能一键复制连接命令：
 
 ```bash

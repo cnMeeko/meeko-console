@@ -5,6 +5,8 @@
 // 记录之间用 *#* 分隔；其运行时数据在内存里，改动文件后需要重启进程才生效。
 
 const fs = require('fs');
+const os = require('os');
+const https = require('https');
 const path = require('path');
 const { spawn } = require('child_process');
 
@@ -47,6 +49,92 @@ function readPanel() {
 function writePanel(cfg) {
   fs.mkdirSync(NPS_DIR, { recursive: true });
   fs.writeFileSync(PANEL_FILE, JSON.stringify(cfg, null, 2), { mode: 0o600 });
+}
+
+/* ----------------------- 服务器公网地址自动识别 ----------------------- */
+// 面板里「公网地址」留空时，用本机实际地址（先网卡，再外网探测）作为默认值，
+// 避免出现写死示例、也不用手动填。可用 NPS_PUBLIC_ADDR / MEEKO_PUBLIC_ADDR 覆盖。
+
+const ADDR_CACHE = path.join(NPS_DIR, 'server-addr.txt');
+let detectedAddr = '';
+let addrProbed = false;
+
+function isPrivateIPv4(ip) {
+  const p = String(ip).split('.').map(Number);
+  if (p.length !== 4 || p.some(function (n) { return !(n >= 0 && n <= 255); })) return true;
+  return p[0] === 0 || p[0] === 10 || p[0] === 127 ||
+    (p[0] === 192 && p[1] === 168) ||
+    (p[0] === 172 && p[1] >= 16 && p[1] <= 31) ||
+    (p[0] === 169 && p[1] === 254);
+}
+
+function localPublicIPv4() {
+  const nics = os.networkInterfaces();
+  let found = '';
+  Object.keys(nics).forEach(function (name) {
+    (nics[name] || []).forEach(function (n) {
+      if (!found && n.family === 'IPv4' && !n.internal && !isPrivateIPv4(n.address)) found = n.address;
+    });
+  });
+  return found;
+}
+
+function cachedAddr() {
+  try { return fs.readFileSync(ADDR_CACHE, 'utf8').trim(); } catch (e) { return ''; }
+}
+
+function saveAddrCache(ip) {
+  try {
+    fs.mkdirSync(NPS_DIR, { recursive: true });
+    fs.writeFileSync(ADDR_CACHE, ip, { mode: 0o600 });
+  } catch (e) {}
+}
+
+function httpsText(url, timeoutMs) {
+  return new Promise(function (resolve) {
+    let done = false;
+    const finish = function (v) { if (!done) { done = true; resolve(v); } };
+    try {
+      const req = https.get(url, { timeout: timeoutMs || 3000, headers: { 'User-Agent': 'meeko-console' } }, function (res) {
+        let body = '';
+        res.on('data', function (c) { if (body.length < 200) body += c; });
+        res.on('end', function () { finish(String(body || '').trim()); });
+      });
+      req.on('timeout', function () { req.destroy(); finish(''); });
+      req.on('error', function () { finish(''); });
+    } catch (e) { finish(''); }
+  });
+}
+
+async function probePublicAddrAsync() {
+  const candidates = ['https://api.ipify.org', 'https://ifconfig.me/ip', 'https://ipv4.icanhazip.com'];
+  for (let i = 0; i < candidates.length; i++) {
+    const text = await httpsText(candidates[i], 3000);
+    const m = text.match(/^([0-9]{1,3}(?:\.[0-9]{1,3}){3})$/);
+    if (m && !isPrivateIPv4(m[1])) {
+      detectedAddr = m[1];
+      saveAddrCache(m[1]);
+      return detectedAddr;
+    }
+  }
+  return detectedAddr;
+}
+
+function probePublicAddr() {
+  const env = String(process.env.NPS_PUBLIC_ADDR || process.env.MEEKO_PUBLIC_ADDR || '').trim();
+  if (env) { detectedAddr = env; return detectedAddr; }
+  detectedAddr = cachedAddr() || localPublicIPv4();
+  if (!addrProbed) {
+    addrProbed = true;
+    probePublicAddrAsync().catch(function () {});
+  }
+  return detectedAddr;
+}
+
+function effectiveAddr(panel) {
+  const custom = String((panel && panel.publicAddr) || '').trim();
+  if (custom) return custom;
+  return detectedAddr || probePublicAddr();
 }
 
 function readRecords(file) {
@@ -429,11 +517,15 @@ function portTaken(tunnels, mode, port, serverIp, excludeIds) {
 function state() {
   const panel = readPanel();
   const tunnels = tunnelModelList();
+  const autoAddr = detectedAddr || localPublicIPv4();
   return {
     config: {
       enabled: panel.enabled !== false,
       bridgePort: Number(panel.bridgePort) || DEFAULT_BRIDGE_PORT,
-      publicAddr: panel.publicAddr || '',
+      // 没手动配置时直接回本机识别到的地址，界面输入框即默认显示服务器 IP
+      publicAddr: effectiveAddr(panel),
+      autoAddr: autoAddr,
+      addrCustom: !!String(panel.publicAddr || '').trim(),
       webPort: WEB_PORT,
       version: NPS_VERSION,
       dataDir: NPS_DIR
@@ -641,12 +733,13 @@ function deleteTunnels(ids) {
 // 给客户端的连接命令（npc 客户端）
 function clientCommand(client, publicAddr) {
   const panel = readPanel();
-  const addr = String(publicAddr || panel.publicAddr || '').trim() || '<服务器公网地址>';
+  const addr = String(publicAddr || '').trim() || effectiveAddr(panel);
   const host = addr.indexOf(':') >= 0 ? addr : addr + ':' + (Number(panel.bridgePort) || DEFAULT_BRIDGE_PORT);
   return 'npc -server=' + host + ' -vkey=' + (client.vkey || '') + ' -type=tcp';
 }
 
 function bootStart() {
+  probePublicAddr();
   ensureConf();
   if (!readPanel().enabled) return;
   return startNps().catch(function (e) { log('[console] NPS 启动失败: ' + e.message); });
