@@ -6,7 +6,7 @@
 
 一个容器搞定 **SSL 证书自动签发/续期**、**DDNS 动态解析**、**EasyTier 组网**，全部在同一个 Web 控制台里配置。
 
-基于 Caddy + Node.js，单镜像、单容器，开箱即用。当前版本 **0.2.3**（见 [`VERSION`](./VERSION)，变更记录见 [`CHANGELOG.md`](./CHANGELOG.md)）。
+基于 Caddy + Node.js，单镜像、单容器，开箱即用。当前版本 **0.2.4**（见 [`VERSION`](./VERSION)，变更记录见 [`CHANGELOG.md`](./CHANGELOG.md)）。
 
 ---
 
