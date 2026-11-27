@@ -13,11 +13,14 @@ FROM ${NODE_IMAGE} AS node
 # 最终镜像：仅保留运行所需二进制与库，去除 npm/yarn/头文件等
 FROM ${ALPINE_IMAGE}
 
+# 全局 ARG 在 stage 内不可见，这里必须重新声明，否则 RUN 里的 ${NPS_VERSION} 会变成字面量导致 404
+ARG NPS_VERSION=0.26.10
+ARG TARGETARCH=amd64
+
 # 版本号由 CI 读取 VERSION 文件传入，本地构建时用默认值
 ARG VERSION=0.3.0
 # 镜像角色标识：本镜像内置 Caddy / EasyTier / NPS 服务端，属于装在服务器上的服务端版
 ARG EDITION=server
-ARG TARGETARCH=amd64
 LABEL org.opencontainers.image.title="meeko-console" \
       org.opencontainers.image.description="Meeko 面板（服务端版）— SSL 证书 + DDNS + EasyTier + NPS 一体化控制台" \
       org.opencontainers.image.source="https://github.com/cnMeeko/meeko-console" \
