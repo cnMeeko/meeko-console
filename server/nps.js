@@ -6,6 +6,7 @@
 
 const fs = require('fs');
 const os = require('os');
+const http = require('http');
 const https = require('https');
 const path = require('path');
 const { spawn } = require('child_process');
@@ -23,6 +24,7 @@ const NPS_BIN = process.env.NPS_BIN || '/opt/nps/nps';
 const NPS_VERSION = process.env.NPS_VERSION || '0.26.10';
 const DEFAULT_BRIDGE_PORT = Number(process.env.NPS_BRIDGE_PORT || 8024);
 const WEB_PORT = Number(process.env.NPS_WEB_PORT || 18080);
+const WEB_HOST = '127.0.0.1';
 
 const SEP = '*#*';
 
@@ -197,6 +199,131 @@ function randomKey(len) {
   let out = '';
   for (let i = 0; i < len; i++) out += chars[Math.floor(Math.random() * chars.length)];
   return out;
+}
+
+/* --------------------- 客户端在线 / 离线状态 --------------------- */
+// clients.json 里的 IsConnect 只是落盘那一刻的快照，不能当实时状态用；
+// 真正的在线状态只在 NPS 进程内存里，所以去问它本机 127.0.0.1 的管理接口。
+
+let onlineRows = null;
+let onlineAt = 0;
+let onlineErr = '';
+let onlineBusy = false;
+let onlineTimer = null;
+
+function confValue(key) {
+  try {
+    const text = fs.readFileSync(CONF_FILE, 'utf8');
+    const m = text.match(new RegExp('^\\s*' + key + '\\s*=\\s*(.*)$', 'm'));
+    return m ? String(m[1]).trim() : '';
+  } catch (e) {
+    return '';
+  }
+}
+
+function webForm(pathname, body, cookie) {
+  return new Promise(function (resolve, reject) {
+    const data = body || '';
+    let req;
+    try {
+      req = http.request({
+        host: WEB_HOST,
+        port: WEB_PORT,
+        path: pathname,
+        method: 'POST',
+        timeout: 3000,
+        headers: Object.assign({
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Length': Buffer.byteLength(data)
+        }, cookie ? { Cookie: cookie } : {})
+      }, function (res) {
+        let out = '';
+        res.on('data', function (c) { if (out.length < 200000) out += c; });
+        res.on('end', function () {
+          const raw = res.headers['set-cookie'];
+          resolve({
+            status: res.statusCode,
+            body: out,
+            cookie: raw && raw.length ? String(raw[0]).split(';')[0] : ''
+          });
+        });
+      });
+    } catch (e) {
+      return reject(e);
+    }
+    req.on('timeout', function () { req.destroy(new Error('连接 NPS 管理接口超时')); });
+    req.on('error', reject);
+    req.end(data);
+  });
+}
+
+let webCookie = '';
+
+async function webLogin() {
+  const user = confValue('web_username');
+  const pass = confValue('web_password');
+  if (!user || !pass) throw new Error('NPS 配置缺少 web_username / web_password');
+  const login = await webForm('/login/verify', 'username=' + encodeURIComponent(user) + '&password=' + encodeURIComponent(pass));
+  if (login.status !== 200 || !login.cookie) throw new Error('NPS 管理接口登录失败');
+  webCookie = login.cookie;
+  return webCookie;
+}
+
+async function rowsOnce() {
+  if (!webCookie) await webLogin();
+  const list = await webForm('/client/list', 'limit=200&offset=0', webCookie);
+  if (list.status !== 200) throw new Error('HTTP ' + list.status);
+  const data = JSON.parse(list.body || '{}');
+  const rows = Array.isArray(data.rows) ? data.rows : [];
+  return rows.map(function (r) {
+    return {
+      id: Number(r.Id),
+      online: !!r.IsConnect,
+      addr: String(r.Addr || ''),
+      version: String(r.Version || ''),
+      nowConn: Number(r.NowConn || 0)
+    };
+  });
+}
+
+async function fetchClientRows() {
+  // 复用登录会话；NPS 重启后 session 失效（接口会返回 500 或登录页 HTML），重新登录再试一次
+  try {
+    return await rowsOnce();
+  } catch (e) {
+    webCookie = '';
+    try {
+      return await rowsOnce();
+    } catch (e2) {
+      throw new Error('NPS 客户端状态读取失败：' + e2.message);
+    }
+  }
+}
+
+function refreshOnline() {
+  if (onlineBusy) return Promise.resolve(onlineRows);
+  onlineBusy = true;
+  return fetchClientRows().then(function (rows) {
+    onlineRows = rows;
+    onlineAt = Date.now();
+    onlineErr = '';
+    return rows;
+  }).catch(function (e) {
+    onlineErr = e.message;
+    return onlineRows;
+  }).then(function (rows) {
+    onlineBusy = false;
+    return rows;
+  });
+}
+
+function startOnlinePolling() {
+  if (onlineTimer) return;
+  onlineTimer = setInterval(function () {
+    if (!proc) return;
+    refreshOnline();
+  }, 15000);
+  if (onlineTimer.unref) onlineTimer.unref();
 }
 
 /* --------------------------- 配置文件 --------------------------- */
@@ -377,6 +504,9 @@ function mutate(fn) {
       await stopNps();
       manualStop = true;
     }
+    // 进程停了，之前缓存的上线状态不再可信，交给下一次轮询重新取
+    onlineRows = null;
+    onlineAt = 0;
     fn();
     ensureConf();
     if (panel.enabled) {
@@ -451,8 +581,17 @@ function tunnelModel(mode, client, input, id) {
   };
 }
 
+function onlineInfo(id) {
+  if (!onlineRows) return null;
+  for (let i = 0; i < onlineRows.length; i++) {
+    if (Number(onlineRows[i].id) === Number(id)) return onlineRows[i];
+  }
+  return null;
+}
+
 function publicClient(c, tunnels) {
   const count = tunnels.filter(function (t) { return t.Client && Number(t.Client.Id) === Number(c.Id); }).length;
+  const live = onlineInfo(c.Id);
   return {
     id: Number(c.Id),
     remark: c.Remark || '',
@@ -462,7 +601,11 @@ function publicClient(c, tunnels) {
     flowLimit: Number((c.Flow && c.Flow.FlowLimit) || 0),
     status: c.Status !== false,
     tunnelCount: count,
-    connected: !!c.IsConnect
+    // null 表示还没拿到 NPS 的实时数据（面板界面上显示「检测中」）
+    connected: live ? !!live.online : null,
+    addr: live ? live.addr : '',
+    clientVersion: live ? live.version : '',
+    nowConn: live ? live.nowConn : 0
   };
 }
 
@@ -552,7 +695,9 @@ function state() {
       addrCustom: !!String(panel.publicAddr || '').trim(),
       webPort: WEB_PORT,
       version: NPS_VERSION,
-      dataDir: NPS_DIR
+      dataDir: NPS_DIR,
+      onlineAt: onlineAt || 0,
+      onlineError: onlineErr || ''
     },
     status: {
       running: !!proc,
@@ -770,12 +915,21 @@ function clientCommand(client, publicAddr) {
 function bootStart() {
   probePublicAddr();
   ensureConf();
+  startOnlinePolling();
   if (!readPanel().enabled) return;
   return startNps().catch(function (e) { log('[console] NPS 启动失败: ' + e.message); });
 }
 
+// 前台按需刷新客户端在线状态（供面板轮询）
+async function online() {
+  if (!proc) return { at: 0, running: false, clients: [], error: 'NPS 未运行' };
+  const rows = await refreshOnline();
+  return { at: onlineAt || 0, running: true, clients: rows || [], error: onlineErr || '' };
+}
+
 module.exports = {
   state: state,
+  online: online,
   saveConfig: saveConfig,
   addClients: addClients,
   updateClient: updateClient,
@@ -785,14 +939,24 @@ module.exports = {
   deleteTunnels: deleteTunnels,
   clientCommand: clientCommand,
   start: startNps,
-  stop: function () { return enqueue(stopNps); },
+  stop: function () {
+    return enqueue(stopNps).then(function () {
+      onlineRows = null;
+      onlineAt = 0;
+    });
+  },
   restart: function () {
     return enqueue(async function () {
       manualStop = true;
       if (proc) await stopNps();
       manualStop = true;
+      onlineRows = null;
+      onlineAt = 0;
       await startNps();
       manualStop = false;
+    }).then(function () {
+      // 客户端重连需要几秒，稍后再取一次实时状态
+      setTimeout(function () { refreshOnline(); }, 4000);
     });
   },
   // 恢复备份后重新读取 NPS 数据（仅在启用时重启）
