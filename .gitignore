@@ -2,6 +2,9 @@
 console-data/
 data/
 
+# 本地环境变量（含后台密码）
+.env
+
 # 备份文件
 *.tar.gz
 *.zip

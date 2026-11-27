@@ -1,28 +1,31 @@
 services:
   # Caddy + 证书控制台 + DDNS（内置）+ EasyTier，全部在一个容器内
   console:
-    build: .
+    build:
+      context: .
+      args:
+        # 国内服务器可换成镜像加速源，例如：
+        #   EASYTIER_IMAGE=m.daocloud.io/docker.io/easytier/easytier:latest
+        EASYTIER_IMAGE: ${EASYTIER_IMAGE:-easytier/easytier:latest}
+        CADDY_IMAGE: ${CADDY_IMAGE:-caddy:2.8-alpine}
+        NODE_IMAGE: ${NODE_IMAGE:-node:20-alpine}
+        ALPINE_IMAGE: ${ALPINE_IMAGE:-alpine:3.23}
     image: meeko-console:latest
     container_name: meeko-console
     restart: unless-stopped
+    # 宿主机网络模式：容器与宿主机共用回环地址和网卡，
+    # 443/9443/11010-11012 由容器直接监听，不需要再做端口映射
+    network_mode: host
     cap_add:
       - NET_ADMIN
       - NET_RAW
     devices:
       - /dev/net/tun:/dev/net/tun
-    ports:
-      - "443:443"
-      - "443:443/udp"
-      - "9443:9443"
-      - "11010:11010/tcp"
-      - "11010:11010/udp"
-      - "11011:11011/tcp"
-      - "11011:11011/udp"
-      - "11012:11012/tcp"
-      - "11012:11012/udp"
     environment:
       TZ: Asia/Shanghai
+      # Node 只监听回环，宿主机 9600 不对外开放，由容器内 Caddy 反代
       PORT: "9600"
+      HOST: "127.0.0.1"
       DATA_DIR: /console-data
       CADDY_DATA: /data
       CADDY_SNIPPET: /etc/caddy/domains.caddy
@@ -37,8 +40,6 @@ services:
       - ./data:/data
       - ./domains.caddy:/etc/caddy/domains.caddy
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     logging:
       driver: json-file
       options:

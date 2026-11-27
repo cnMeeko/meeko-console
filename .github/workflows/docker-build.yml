@@ -1,15 +1,25 @@
-name: 构建并发布 Docker 镜像
+name: 构建并发布镜像
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
     tags: ["v*"]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
+    inputs:
+      platforms:
+        description: "构建平台（多架构用逗号分隔）"
+        required: false
+        default: "linux/amd64,linux/arm64"
+
+# 同一分支/标签只保留一个进行中的构建，避免重复占用额度
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   REGISTRY: ghcr.io
-  # 镜像名使用仓库全名（小写）
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build:
@@ -17,10 +27,37 @@ jobs:
     permissions:
       contents: read
       packages: write
-
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
+
+      - name: 计算版本号与镜像名
+        id: vars
+        shell: bash
+        run: |
+          set -euo pipefail
+          # 打 tag 触发时以 tag 为准，否则读取 VERSION 文件
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION="$(tr -d ' \r\n\t' < VERSION)"
+          fi
+          # VERSION 只允许 x.y.z，避免生成非法镜像标签
+          if ! [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "VERSION 格式不合法：${VERSION}（应为 主.次.修订，如 0.2.0）" >&2
+            exit 1
+          fi
+          MAJOR="${VERSION%%.*}"
+          REST="${VERSION#*.}"
+          MINOR="${REST%%.*}"
+          # ghcr 要求镜像名全小写
+          IMAGE="${GITHUB_REPOSITORY,,}"
+          {
+            echo "version=${VERSION}"
+            echo "major_minor=${MAJOR}.${MINOR}"
+            echo "image=${IMAGE}"
+          } >> "${GITHUB_OUTPUT}"
+          echo "版本 ${VERSION} -> ${REGISTRY:-ghcr.io}/${IMAGE}"
 
       - name: 设置 QEMU（多架构模拟）
         uses: docker/setup-qemu-action@v3
@@ -29,36 +66,57 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: 登录 GHCR
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 提取镜像元数据（标签）
+      - name: 生成镜像标签与元数据
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ steps.vars.outputs.image }}
+          flavor: |
+            latest=false
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ steps.vars.outputs.version }}
+            type=raw,value=${{ steps.vars.outputs.major_minor }}
+            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+            type=sha,format=short,prefix=sha-
+          labels: |
+            org.opencontainers.image.title=meeko-console
+            org.opencontainers.image.description=Meeko 面板 — SSL 证书 + DDNS + EasyTier 一体化控制台
+            org.opencontainers.image.version=${{ steps.vars.outputs.version }}
+            org.opencontainers.image.licenses=MIT
 
-      - name: 构建并推送多架构镜像
-        uses: docker/build-push-action@v5
+      - name: 构建并推送镜像
+        uses: docker/build-push-action@v6
         with:
           context: .
-          push: true
-          # 支持 amd64 与 arm64 两种架构
-          platforms: linux/amd64,linux/arm64
+          # PR 只构建不推送，分支/标签/workflow_dispatch 均推送
+          push: ${{ github.event_name != 'pull_request' }}
+          platforms: ${{ github.event_name == 'workflow_dispatch' && inputs.platforms || 'linux/amd64,linux/arm64' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # 显式传入 build-arg，避免 BuildKit 无法展开 Dockerfile 中全局 ARG 的默认值
+          # 显式传入全部基础镜像参数：既避免 BuildKit 展开全局 ARG 的问题，
+          # 也方便在仓库 Variables 里一键切到国内加速源（未设置时用官方源）
           build-args: |
-            EASYTIER_IMAGE=easytier/easytier:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            VERSION=${{ steps.vars.outputs.version }}
+            EASYTIER_IMAGE=${{ vars.EASYTIER_IMAGE || 'easytier/easytier:latest' }}
+            CADDY_IMAGE=${{ vars.CADDY_IMAGE || 'caddy:2.8-alpine' }}
+            NODE_IMAGE=${{ vars.NODE_IMAGE || 'node:20-alpine' }}
+            ALPINE_IMAGE=${{ vars.ALPINE_IMAGE || 'alpine:3.23' }}
+          cache-from: type=gha,scope=meeko-console
+          cache-to: type=gha,mode=max,scope=meeko-console
+
+      - name: 输出镜像地址
+        run: |
+          {
+            echo "### meeko-console ${{ steps.vars.outputs.version }}"
+            echo ''
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"

@@ -1,8 +1,11 @@
 # Meeko 面板 — SSL 证书 + DDNS + EasyTier 一体化控制台
 
+[![version](https://img.shields.io/github/v/tag/cnMeeko/meeko-console?label=version&color=blue)](https://github.com/cnMeeko/meeko-console/tags)
+[![build](https://github.com/cnMeeko/meeko-console/actions/workflows/docker-build.yml/badge.svg)](https://github.com/cnMeeko/meeko-console/actions/workflows/docker-build.yml)
+
 一个容器搞定 **SSL 证书自动签发/续期**、**DDNS 动态解析**、**EasyTier 组网**，全部在同一个 Web 控制台里配置。
 
-基于 Caddy + Node.js，单镜像、单容器，开箱即用。
+基于 Caddy + Node.js，单镜像、单容器，开箱即用。当前版本 **0.2.0**（见 [`VERSION`](./VERSION)，变更记录见 [`CHANGELOG.md`](./CHANGELOG.md)）。
 
 ---
 
@@ -35,36 +38,34 @@
 ```yaml
 services:
   console:
-    image: ghcr.io/你的用户名/meeko-console:latest
+    build:
+      context: .
+      args:
+        EASYTIER_IMAGE: ${EASYTIER_IMAGE:-easytier/easytier:latest}
+        CADDY_IMAGE: ${CADDY_IMAGE:-caddy:2.8-alpine}
+        NODE_IMAGE: ${NODE_IMAGE:-node:20-alpine}
+        ALPINE_IMAGE: ${ALPINE_IMAGE:-alpine:3.23}
+    image: meeko-console:latest
     container_name: meeko-console
     restart: unless-stopped
+    # 宿主机网络模式：不开端口映射，容器直接占用宿主 443 / 9443 / 11010-11012
+    network_mode: host
     cap_add:
       - NET_ADMIN
       - NET_RAW
     devices:
       - /dev/net/tun:/dev/net/tun
-    ports:
-      - "443:443"
-      - "443:443/udp"
-      - "9443:9443"
-      - "11010:11010/tcp"
-      - "11010:11010/udp"
-      - "11011:11011/tcp"
-      - "11011:11011/udp"
-      - "11012:11012/tcp"
-      - "11012:11012/udp"
     environment:
       TZ: Asia/Shanghai
-      # 管理后台账号密码（务必修改，勿使用默认值）
-      CONSOLE_USER: admin
-      CONSOLE_PASS: 你的强密码
+      PORT: "9600"
+      HOST: "127.0.0.1"
+      CONSOLE_USER: ${CONSOLE_USER:-admin}
+      CONSOLE_PASS: ${CONSOLE_PASS:-admin}
     volumes:
       - ./console-data:/console-data
       - ./data:/data
       - ./domains.caddy:/etc/caddy/domains.caddy
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     logging:
       driver: json-file
       options:
@@ -75,6 +76,11 @@ services:
 ### 3. 启动
 
 ```bash
+# 推荐：一键脚本（含环境自检、端口检查、启动后自检）
+./deploy.sh
+
+# 或者手动
+docker compose build console
 docker compose up -d
 ```
 
@@ -92,9 +98,13 @@ docker compose up -d
 git clone 你的仓库地址
 cd 仓库目录
 
-# 国内可指定 EasyTier 镜像加速源
+# 国内可指定全部基础镜像的加速源（不传则用官方源）
 docker build \
+  --build-arg VERSION=$(cat VERSION) \
   --build-arg EASYTIER_IMAGE=m.daocloud.io/docker.io/easytier/easytier:latest \
+  --build-arg CADDY_IMAGE=m.daocloud.io/docker.io/library/caddy:2.8-alpine \
+  --build-arg NODE_IMAGE=m.daocloud.io/docker.io/library/node:20-alpine \
+  --build-arg ALPINE_IMAGE=m.daocloud.io/docker.io/library/alpine:3.23 \
   -t meeko-console:latest .
 ```
 
@@ -102,15 +112,25 @@ docker build \
 
 ## 🔧 配置说明
 
+### 网络模式
+
+容器使用 **host 网络模式**（`network_mode: host`），与宿主机共用网卡和回环地址：
+
+- 不需要 `ports` 端口映射，Caddy 直接监听宿主机 443 / 9443，EasyTier 直接监听 11010–11012。
+- 容器内的 `127.0.0.1` 就是宿主机本身，所以反代目标填 `127.0.0.1:8080` 可直接访问宿主机上的服务，不再需要 `host.docker.internal`。
+- Node 后端只监听 `127.0.0.1:9600`，由容器内 Caddy 反代，宿主机外部无法直连 9600。
+- Caddy 管理接口 `admin` 只监听 `127.0.0.1:2019`，避免暴露到公网。
+
 ### 端口
 
 | 端口 | 协议 | 用途 |
 |------|------|------|
 | 443 | TCP/UDP | Caddy HTTPS（证书签发与域名反代） |
-| 9443 | TCP | 控制台 Web 入口（Caddy 反代到内部 Node 9600） |
+| 9443 | TCP | 控制台 Web 入口（Caddy 反代到容器内 Node 9600） |
 | 11010–11012 | TCP/UDP | EasyTier 组网监听端口 |
+| 9600 / 2019 | TCP | 仅回环：Node 后端与 Caddy 管理接口，不对外 |
 
-> `9600` 是容器内部 Node 后端端口，不对外暴露。
+> host 模式下这些端口直接占用宿主机端口，启动前需确认没有 nginx、caddy、面板等程序占用 443 / 9443。
 
 ### 环境变量
 
@@ -119,9 +139,12 @@ docker build \
 | `CONSOLE_USER` | `admin` | 后台登录用户名 |
 | `CONSOLE_PASS` | `admin` | 后台登录密码（**请务必修改**） |
 | `DDNS_INTERVAL` | `300` | DDNS 检查间隔（秒） |
-| `PORT` | `9600` | 容器内 Node 监听端口 |
+| `PORT` | `9600` | Node 监听端口 |
+| `HOST` | `127.0.0.1` | Node 监听地址，默认仅回环 |
 | `DATA_DIR` | `/console-data` | 控制台数据存储目录 |
 | `CADDY_DATA` | `/data` | Caddy 证书存储目录 |
+
+> 可复制 `.env.example` 为 `.env` 填写账号密码与镜像源，Compose 会自动读取。
 
 ### 数据卷
 
@@ -176,18 +199,56 @@ docker build \
 镜像地址格式：
 
 ```
-ghcr.io/<你的用户名>/<仓库名>:latest
+ghcr.io/cnmeeko/meeko-console:latest
 ```
 
+标签由 CI 按 `VERSION` 文件自动生成，同一个版本号会同时产出四类标签：
+
+| 标签 | 示例 | 说明 |
+|------|------|------|
+| 完整版本 | `0.2.0` | 与 `VERSION` / git tag 一致 |
+| 主次版本 | `0.2` | 便于只跟随次版本更新 |
+| `latest` | `latest` | 仅默认分支（main）构建时生成 |
+| 提交号 | `sha-1a2b3c4` | 便于回溯到具体提交 |
+
+> 打 `v*` 标签触发时，以标签号作为版本，`VERSION` 文件仅作为普通分支构建的版本来源。发版流程：改 `VERSION` → 提交 → 打 `v0.2.0` 标签 → 两者都会出同一版本镜像。
+
 首次使用需在仓库 **Settings → Actions → General → Workflow permissions** 中勾选 **Read and write permissions**，并在 **Packages** 设置中将镜像可见性设为 Public 或按需授权。
+
+国内构建可选的加速源，在仓库 **Settings → Secrets and variables → Actions → Variables** 里新增（不配置则用官方源）：
+
+| 变量名 | 示例值 |
+|--------|--------|
+| `EASYTIER_IMAGE` | `m.daocloud.io/docker.io/easytier/easytier:latest` |
+| `CADDY_IMAGE` | `m.daocloud.io/docker.io/library/caddy:2.8-alpine` |
+| `NODE_IMAGE` | `m.daocloud.io/docker.io/library/node:20-alpine` |
+| `ALPINE_IMAGE` | `m.daocloud.io/docker.io/library/alpine:3.23` |
+
+---
+
+## 🩺 常见部署错误
+
+| 现象 | 原因 | 处理 |
+|------|------|------|
+| `error gathering device information while adding custom device "/dev/net/tun": no such file or directory` | 服务器未启用 TUN/TAP（OpenVZ / LXC 常见） | `modprobe tun`；仍无 `/dev/net/tun` 则需服务商开启或换 KVM/物理机，EasyTier 必须有 TUN |
+| `Bind for 0.0.0.0:443 failed: port is already allocated` 或 Caddy 日志 `address already in use` | 宿主机已有 nginx / caddy / 宝塔面板占用 443 或 9443 | 停掉占用服务；host 模式下无法改映射端口 |
+| `network_mode: host` 与 `ports` 同时存在 → `conflicting options: port publishing and the container type network mode` | 旧版 compose 文件残留 `ports` | 已在本仓库移除，host 模式下不要再写 `ports` |
+| 构建阶段拉取 `caddy` / `node` / `easytier` 镜像超时 | 国内访问 Docker Hub 受限 | 用 `CADDY_IMAGE` / `NODE_IMAGE` / `ALPINE_IMAGE` / `EASYTIER_IMAGE` 换加速源，或配置 `registry-mirrors` |
+| `docker: 'compose' is not a docker command` | 只装了旧版 docker-compose 或未装 compose 插件 | 安装 `docker-compose-plugin`，`deploy.sh` 会自动兼容 v1 |
+| 证书一直 pending，Caddy 日志报 DNS / 连接失败 | 域名未解析到本机、80/443 被防火墙拦截、或 DNS 有 CDN 代理 | 确认 A 记录指向本机公网 IP，放行 443，Cloudflare 记录设为 DNS-only |
+| Caddy 日志 `listen tcp :80: bind: address already in use` | 宿主机上 nginx / 宝塔面板等已占用 80，而 Caddy 给域名站点默认会加一个 HTTP->HTTPS 跳转监听 | 已在 `Caddyfile` 全局块加 `auto_https disable_redirects`（本仓库默认已加），证书走 TLS-ALPN，不需要 80 |
+| 反代到宿主机服务 502 | 目标服务只监听 `127.0.0.1` 之外的地址或端口不对 | host 模式下直接填 `127.0.0.1:端口` 即可，无需 `host.docker.internal` |
+
+迁移提示：从桥接模式切换到 host 模式后，历史配置里如果存过 `host.docker.internal`，启动时会被自动纠正为 `127.0.0.1`，无需手工改 `domains.caddy`。
 
 ---
 
 ## ⚠️ 安全提示
 
 - **务必修改默认密码** `CONSOLE_PASS`，切勿使用默认的 `admin`。
-- 服务器凭据、AccessKey 等敏感信息请勿提交到代码仓库。
+- 服务器凭据、AccessKey 等敏感信息请勿提交到代码仓库（例如 `服务器登录信息.md`）。
 - 控制台建议仅在内网或通过 VPN 访问，或在 Caddy 中为 9443 配置访问控制。
+- host 网络模式下容器直接占用宿主端口，`2019`（Caddy 管理接口）与 `9600`（Node 后端）已限定为仅回环访问。
 
 ---
 

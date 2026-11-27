@@ -4,7 +4,11 @@
 {
 	# 需要接收证书到期提醒时可填写邮箱，默认留空
 	# email admin@example.com
-	admin 0.0.0.0:2019
+	# host 网络模式下只监听回环，避免 2019 管理接口暴露到公网
+	admin 127.0.0.1:2019
+	# 宿主机常被 nginx 等程序占用 80；证书走 TLS-ALPN（HTTP 验证已关闭），
+	# 关闭自动 HTTP->HTTPS 跳转后 Caddy 只监听 443/9443，不会抢占 80
+	auto_https disable_redirects
 }
 
 # 控制台与 Caddy 在同一个容器内，直接走本机回环

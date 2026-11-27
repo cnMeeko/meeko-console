@@ -11,6 +11,7 @@ const ddns = require('./ddns');
 const backup = require('./backup');
 
 const PORT = Number(process.env.PORT || 9600);
+const HOST = process.env.HOST || '127.0.0.1';
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const CADDY_DATA = process.env.CADDY_DATA || '/caddy-data';
 const CADDY_SNIPPET = process.env.CADDY_SNIPPET || '/etc/caddy/domains.caddy';
@@ -66,12 +67,13 @@ function validUpstream(upstream) {
   return upstream.length <= 200 && /^[a-z0-9._:\-\[\]\/]+$/i.test(upstream);
 }
 
-// 容器内的 127.0.0.1 指向 Caddy 自己，统一换成宿主机地址
+// host 网络模式下容器与宿主机共用回环地址，127.0.0.1 / localhost 直接就是宿主机本身，
+// 不需要再改写；同时把历史配置里的 host.docker.internal（旧桥接模式写法）纠正回来
 function normalizeUpstream(value) {
-  let upstream = String(value || '').trim();
+  const upstream = String(value || '').trim();
   if (!upstream) return '';
-  const m = upstream.match(/^(?:https?:\/\/)?(127\.0\.0\.1|localhost)(:\d+)?(\/.*)?$/i);
-  if (m) upstream = 'host.docker.internal' + (m[2] || '') + (m[3] || '');
+  const m = upstream.match(/^(?:https?:\/\/)?(127\.0\.0\.1|localhost|host\.docker\.internal|host-gateway)(:\d+)?(\/.*)?$/i);
+  if (m) return '127.0.0.1' + (m[2] || '') + (m[3] || '');
   return upstream;
 }
 
@@ -116,7 +118,7 @@ function writeSnippet(list) {
     lines.push('\t\t}');
     lines.push('\t}');
     lines.push('\tencode gzip');
-    lines.push(item.upstream ? '\treverse_proxy ' + item.upstream : '\trespond "It works" 200');
+    lines.push(item.upstream ? '\treverse_proxy ' + normalizeUpstream(item.upstream) : '\trespond "It works" 200');
     lines.push('}');
     lines.push('');
   });
@@ -737,6 +739,6 @@ if (etBoot.enabled) {
 // 容器启动后开始 DDNS 定时检查
 ddns.start();
 
-server.listen(PORT, '0.0.0.0', function () {
-  console.log('[console] SSL 证书管理服务已启动，端口 ' + PORT);
+server.listen(PORT, HOST, function () {
+  console.log('[console] SSL 证书管理服务已启动，监听 ' + HOST + ':' + PORT);
 });
