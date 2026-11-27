@@ -128,7 +128,7 @@
     <div class="toolbar">
       <div>
         <h1>Meeko面板管理<span class="edition" id="editionBadge" hidden>服务端版</span></h1>
-        <p class="desc" style="margin:0">证书由服务器上的 Caddy 自动向 Let's Encrypt 申请并续期（90 天）。添加或修改域名后自动生效。</p>
+        <p class="desc" id="pageHint" style="margin:0">让域名自动指向服务器当前公网地址：保存后立即更新一次，之后按设定的间隔自动检查。</p>
       </div>
       <div class="account-line">
         当前账号：<b id="currentUser">admin</b>
@@ -517,11 +517,20 @@
     $('loginUser').value = currentUser || 'admin';
   }
 
+  var PAGE_HINTS = {
+    ddns: '让域名自动指向服务器当前公网地址：保存后立即更新一次，之后按设定的间隔自动检查。',
+    ssl: '证书由服务器上的 Caddy 自动向 Let\'s Encrypt 申请并续期（90 天）。添加或修改域名后自动生效。',
+    et: '内置 EasyTier 服务端，控制台内即可配置主机名、网络名、密码、虚拟 IP 与监听端口。',
+    nps: '内置 NPS 服务端：客户端用 vkey 连上桥接端口后，把内网 TCP / UDP 服务映射到服务器。',
+    backup: '支持本地导入 / 导出配置，以及七牛云 Kodo 对象存储备份；NPS 的客户端与隧道数据一并备份。'
+  };
+
   function switchTab(name) {
     var ddns = name === 'ddns';
     var et = name === 'et';
     var nps = name === 'nps';
     var backup = name === 'backup';
+    if (PAGE_HINTS[name]) $('pageHint').textContent = PAGE_HINTS[name];
     $('tabSsl').classList.toggle('active', !ddns && !et && !nps && !backup);
     $('tabDdns').classList.toggle('active', ddns);
     $('tabEt').classList.toggle('active', et);
