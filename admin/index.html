@@ -1116,7 +1116,7 @@
 
   function removeNpsClient(id) {
     var c = npsClientById(id);
-    if (!confirm('确定删除客户端“' + (c ? c.remark : id) + '”吗？该客户端的隧道也会一起删除。')) return;
+    if (!confirm('确定删除客户端“' + (c ? c.remark : id) + '”吗？其名下 ' + (c && c.tunnelCount ? c.tunnelCount : 0) + ' 条隧道会被一起删除，且不可撤销。')) return;
     request('/nps/clients?id=' + id, { method: 'DELETE' }).then(function (res) {
       if (!res.ok) throw new Error((res.data && res.data.message) || '删除失败');
       applyNpsState(res.data);

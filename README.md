@@ -6,7 +6,7 @@
 
 一个容器搞定 **SSL 证书自动签发/续期**、**DDNS 动态解析**、**EasyTier 组网**、**NPS 内网穿透**，全部在同一个 Web 控制台里配置。
 
-基于 Caddy + Node.js + NPS，单镜像、单容器，开箱即用。当前版本 **0.3.3**（见 [`VERSION`](./VERSION)，变更记录见 [`CHANGELOG.md`](./CHANGELOG.md)）。
+基于 Caddy + Node.js + NPS，单镜像、单容器，开箱即用。当前版本 **0.3.4**（见 [`VERSION`](./VERSION)，变更记录见 [`CHANGELOG.md`](./CHANGELOG.md)）。
 
 > 本镜像带 `meeko.role=server` / `meeko.edition=server` 标签，是**服务端版**（内置 NPS 服务端、EasyTier 服务端与 Caddy），面相部署在服务器上使用。用 `docker inspect` 可确认：
 
@@ -224,6 +224,8 @@ npc -server=你的公网地址:8024 -vkey=xxxxxx -type=tcp
    - **批量删除**：勾选后一次删除。
 
 改动保存后面板会自动重启 NPS 进程使配置生效（隧道会短暂中断数秒）。别忘了在防火墙 / 安全组放行桥接端口与各隧道端口。
+
+> 数据安全：每次写入 `clients.json` / `tasks.json` 前都会留一份同目录的 `*.bak` 快照；如果记录文件被清成 0 字节（误删、异常重启等），容器启动时会自动用快照恢复。删除客户端会连带删除其名下所有隧道，确认框会提示条数。
 
 4. **其它隧道**：`tasks.json` 里如果存在 `socks5` / `httpProxy` 等非 TCP/UDP 记录（典型场景是从原生安装的 NPS 迁移过来），面板会在「其它隧道」区块里只读展示并可删除，避免这些记录在界面上"消失"。要新建或编辑这类隧道，请在 NPS 原生方式里改，或继续使用 TCP/UDP。
 

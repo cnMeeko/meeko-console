@@ -18,7 +18,7 @@ ARG NPS_VERSION=0.26.10
 ARG TARGETARCH=amd64
 
 # 版本号由 CI 读取 VERSION 文件传入，本地构建时用默认值
-ARG VERSION=0.3.3
+ARG VERSION=0.3.4
 # 镜像角色标识：本镜像内置 Caddy / EasyTier / NPS 服务端，属于装在服务器上的服务端版
 ARG EDITION=server
 LABEL org.opencontainers.image.title="meeko-console" \

@@ -149,14 +149,36 @@ function readRecords(file) {
   }).filter(Boolean);
 }
 
+function backupFile(file) {
+  const bak = file + '.bak';
+  try {
+    if (fs.existsSync(file) && fs.statSync(file).size > 0) fs.copyFileSync(file, bak);
+  } catch (e) {}
+}
+
 function writeRecords(file, list) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
+  backupFile(file);
   // NPS 的记录格式：每条 JSON 一行，记录之间单独一行 *#*，文件以 *#* 结尾
   const body = list.length
     ? list.map(function (o) { return JSON.stringify(o); }).join('\n' + SEP) + '\n' + SEP
     : '';
   fs.writeFileSync(file, body, { mode: 0o600 });
   try { fs.chmodSync(file, 0o600); } catch (e) {}
+}
+
+// 记录文件被清空（0 字节）时，用上一次写入前的快照自动恢复，
+// 避免误删、异常退出导致隧道数据丢失。
+function recoverIfEmpty(file) {
+  const bak = file + '.bak';
+  let size = -1;
+  try { size = fs.existsSync(file) ? fs.statSync(file).size : -1; } catch (e) {}
+  if (size > 0) return false;
+  const recs = readRecords(bak);
+  if (!recs.length) return false;
+  const body = recs.map(function (o) { return JSON.stringify(o); }).join('\n' + SEP) + '\n' + SEP;
+  fs.writeFileSync(file, body, { mode: 0o600 });
+  return true;
 }
 
 function readClients() { return readRecords(CLIENTS_FILE); }
@@ -236,6 +258,8 @@ function ensureConf() {
   fs.mkdirSync(CONF_DIR, { recursive: true });
   if (!fs.existsSync(CLIENTS_FILE)) writeClients([]);
   if (!fs.existsSync(TASKS_FILE)) writeTunnels([]);
+  recoverIfEmpty(CLIENTS_FILE);
+  recoverIfEmpty(TASKS_FILE);
   if (!fs.existsSync(HOSTS_FILE)) writeRecords(HOSTS_FILE, []);
   const panel = readPanel();
   if (!fs.existsSync(CONF_FILE)) {
