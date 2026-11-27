@@ -399,9 +399,9 @@
   <div class="dialog">
     <h3>忘记账号密码</h3>
     <p class="desc">面板账号存在容器内的 <code>/console-data/account.json</code>，里面只保存加盐哈希，所以密码找不回来，只能重设。</p>
-    <p class="desc" style="margin-top:8px">在服务器终端（SSH 登录到部署面板的机器）执行下面这条命令，把 <code>admin</code> 和 <code>你的新密码</code> 换成你要用的账号密码：</p>
+    <p class="desc" style="margin-top:8px">在服务器终端（SSH 登录到部署面板的机器）执行下面这条命令即可，<b>执行后账号和密码都变成 <code>admin</code></b>（小写，不用自己填）：</p>
     <pre class="cmd-box" id="forgotCmd"></pre>
-    <p class="desc" style="margin-top:10px">执行后立即生效，不用重启容器，回到登录框用新账号登录即可。<br>
+    <p class="desc" style="margin-top:10px">执行后立即生效，不用重启容器，回到登录框用 <code>admin</code> / <code>admin</code> 登录，进去后到「修改账号」改成自己的密码。<br>
       容器名如果不是 <code>meeko-console</code>，先用 <code>docker ps</code> 查实际名称再替换；用 compose 部署时也可把 <code>docker exec meeko-console</code> 换成 <code>docker compose exec console</code>（在面板目录里执行）。</p>
     <div class="foot">
       <button class="btn" id="btnForgotCopy" type="button">复制指令</button>
@@ -1646,9 +1646,9 @@
 
   /* 忘记账号密码：弹窗给出容器内重设账号的指令 */
   function forgotCmd() {
-    return 'docker exec meeko-console node -e "const c=require(\'crypto\'),f=require(\'fs\'),u=\'admin\',p=\'你的新密码\',s=c.randomBytes(16).toString(\'hex\');'
+    return 'docker exec meeko-console node -e "const c=require(\'crypto\'),f=require(\'fs\'),u=\'admin\',p=\'admin\',s=c.randomBytes(16).toString(\'hex\');'
       + 'f.writeFileSync(\'/console-data/account.json\',JSON.stringify({username:u,salt:s,hash:c.scryptSync(p,s,64).toString(\'hex\')},null,2));'
-      + 'console.log(\'账号已更新为 \'+u)"';
+      + 'console.log(\'账号密码已重置为 admin / admin\')"';
   }
 
   function render() {
