@@ -18,6 +18,7 @@
   .ddns-text { width:100%; min-height:120px; padding:12px; border:1px solid var(--line); border-radius:10px; background:#fafbfd; color:#111827; font-family:ui-monospace,SFMono-Regular,Consolas,"Courier New",monospace; font-size:13px; line-height:1.75; resize:vertical; }
   .ddns-text:focus { outline:none; border-color:var(--primary); background:#fff; }
   .ddns-grid { display:grid; grid-template-columns:1fr 1fr; gap:0 14px; }
+  [hidden] { display:none !important; }
   @media (max-width:640px) { .ddns-grid { grid-template-columns:1fr; } }
   .ddns-actions { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin:4px 0 12px; }
   .ddns-group { border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:14px; background:#fff; }
@@ -105,6 +106,9 @@
   .nps-cid { font-weight:600; color:var(--primary); }
   .nps-online { margin-left:8px; }
   .nps-online + .nps-sw { margin-left:10px; }
+  .nps-cfg-summary { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:10px; font-size:13px; color:#64748b; }
+  .nps-cfg-summary .nps-cfg-text b { color:var(--primary); font-weight:600; }
+  .nps-cfg-summary .btn { padding:4px 11px; font-size:12.5px; }
 </style>
 </head>
 <body>
@@ -231,13 +235,20 @@
           </span>
         </div>
         <div class="et-status" id="npsStatus">正在读取…</div>
-        <div class="ddns-grid">
-          <div class="field"><label>公网地址（客户端连接用，IP 或域名）</label><input id="npsPublicAddr" placeholder="留空则自动使用本机公网 IP" autocomplete="off"></div>
-          <div class="field"><label>桥接端口（npc 连接端口）</label><input id="npsBridgePort" placeholder="8024" autocomplete="off"></div>
+        <div class="nps-cfg-summary">
+          <span class="nps-cfg-text" id="npsCfgText">—</span>
+          <button class="btn" id="btnNpsCfgEdit" type="button">修改</button>
         </div>
-        <p class="desc" id="npsAddrHint" style="margin:6px 0 0"></p>
-        <div class="et-actions">
-          <button class="btn primary" id="btnNpsSaveCfg" type="button">保存配置</button>
+        <div id="npsCfgEditor" hidden>
+          <div class="ddns-grid">
+            <div class="field"><label>公网地址（客户端连接用，IP 或域名）</label><input id="npsPublicAddr" placeholder="留空则自动使用本机公网 IP" autocomplete="off"></div>
+            <div class="field"><label>桥接端口（npc 连接端口）</label><input id="npsBridgePort" placeholder="8024" autocomplete="off"></div>
+          </div>
+          <p class="desc" id="npsAddrHint" style="margin:6px 0 0"></p>
+          <div class="et-actions">
+            <button class="btn primary" id="btnNpsSaveCfg" type="button">保存</button>
+            <button class="btn" id="btnNpsCfgCancel" type="button">取消</button>
+          </div>
         </div>
         <p class="msg" id="npsMsg"></p>
 
@@ -972,6 +983,10 @@
     $('npsAddrHint').innerHTML = cfg.addrCustom
       ? '当前使用手动地址 ' + esc(cfg.publicAddr || '') + '（清空后保存即恢复自动识别）'
       : '已自动识别本机公网地址 <b>' + esc(autoAddr || '未识别到') + '</b>（留空即用它，也可改成已解析到该地址的域名）';
+    // 收起状态下的摘要：平时只看这行，需要改再点「修改」展开
+    var host = cfg.publicAddr || autoAddr || '未识别';
+    $('npsCfgText').innerHTML = '客户端连接地址 <b>' + esc(host) + '</b> · 桥接端口 <b>' + (cfg.bridgePort || 8024) + '</b>'
+      + (cfg.addrCustom ? '' : '<span style="color:#94a3b8"> （自动识别）</span>');
     renderNpsClients();
     renderNpsTunnels('tcp');
     renderNpsTunnels('udp');
@@ -1116,6 +1131,19 @@
     return Array.prototype.map.call(nodes, function (n) { return Number(n.value); });
   }
 
+  // 公网地址 / 桥接端口：平时收起只显示摘要，点「修改」才展开输入框
+  function openNpsCfgEditor(open) {
+    $('npsCfgEditor').hidden = !open;
+    $('btnNpsCfgEdit').hidden = !!open;
+    if (open) {
+      var cfg = (npsState && npsState.config) || {};
+      $('npsPublicAddr').value = cfg.publicAddr || '';
+      $('npsBridgePort').value = cfg.bridgePort || 8024;
+      npsMsg('');
+      $('npsPublicAddr').focus();
+    }
+  }
+
   function npsSaveConfig() {
     var bridgePort = $('npsBridgePort').value.trim();
     var publicAddr = $('npsPublicAddr').value.trim();
@@ -1131,6 +1159,7 @@
     }).then(function (res) {
       if (!res.ok) throw new Error((res.data && res.data.message) || '保存失败');
       applyNpsState(res.data);
+      openNpsCfgEditor(false);
       npsMsg('配置已保存');
     }).catch(function (e) { npsMsg(e.message, true); })
       .then(function () { $('btnNpsSaveCfg').disabled = false; });
@@ -1706,6 +1735,8 @@
   /* NPS */
   $('btnNpsRefresh').onclick = function () { loadNps(false); };
   $('btnNpsSaveCfg').onclick = npsSaveConfig;
+  $('btnNpsCfgEdit').onclick = function () { openNpsCfgEditor(true); };
+  $('btnNpsCfgCancel').onclick = function () { openNpsCfgEditor(false); };
   $('btnNpsRestart').onclick = function () { npsAction('restart'); };
   $('btnNpsStop').onclick = function () { npsAction('stop'); };
   $('btnNpsAddClient').onclick = function () { openNpsClient(null); };
