@@ -309,6 +309,7 @@ function refreshOnline() {
     onlineErr = '';
     return rows;
   }).catch(function (e) {
+    if (e.message !== onlineErr) log('[console] 读取客户端在线状态失败: ' + e.message);
     onlineErr = e.message;
     return onlineRows;
   }).then(function (rows) {
