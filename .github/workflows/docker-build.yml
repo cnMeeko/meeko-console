@@ -126,10 +126,62 @@ jobs:
             echo '```'
           } >> "${GITHUB_STEP_SUMMARY}"
 
-  # 打 v* 标签时，构建成功后自动创建 GitHub Release（发行版），
-  # 这样「发行版」页面始终跟着最新版本走，不用手工点发布。
-  release:
+  # 打 v* 标签时，把已推送的多架构镜像按单架构导出成 tar.gz（离线镜像包），
+  # 作为 Release 附件发布，受限网络里可以 docker load 直接用。
+  export:
     needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            suffix: amd64
+          - platform: linux/arm64
+            suffix: arm64
+    steps:
+      - name: 登录 GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 导出单架构镜像包
+        env:
+          IMAGE: ${{ needs.build.outputs.image }}
+          VERSION: ${{ needs.build.outputs.version }}
+          PLATFORM: ${{ matrix.platform }}
+          SUFFIX: ${{ matrix.suffix }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          REF="ghcr.io/${IMAGE}:${VERSION}"
+          # 从多架构索引里挑出当前平台，再 docker save 成离线包
+          docker pull --platform "${PLATFORM}" "${REF}"
+          FILE="meeko-console-${VERSION}-linux-${SUFFIX}.tar.gz"
+          docker save "${REF}" | gzip -6 > "${FILE}"
+          ls -lh "${FILE}"
+          sha256sum "${FILE}" > "SHA256SUMS-${SUFFIX}.txt"
+          cat "SHA256SUMS-${SUFFIX}.txt"
+
+      - name: 上传镜像包（临时产物）
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-${{ matrix.suffix }}
+          path: |
+            meeko-console-*.tar.gz
+            SHA256SUMS-*.txt
+          retention-days: 3
+
+  # 构建成功后自动创建 GitHub Release（发行版）并挂上镜像文件，
+  # 这样「发行版」页面既有最新版本，也能直接下载到镜像。
+  release:
+    needs: [build, export]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
@@ -138,6 +190,22 @@ jobs:
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
+
+      - name: 下载镜像包
+        uses: actions/download-artifact@v4
+        with:
+          path: assets
+          pattern: image-*
+          merge-multiple: true
+
+      - name: 汇总校验文件
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd assets
+          cat SHA256SUMS-amd64.txt SHA256SUMS-arm64.txt > SHA256SUMS.txt
+          rm -f SHA256SUMS-amd64.txt SHA256SUMS-arm64.txt
+          ls -lh
 
       - name: 组装发行说明
         env:
@@ -164,6 +232,20 @@ jobs:
               echo ""
               echo "镜像摘要：\`${DIGEST}\`"
             fi
+            echo ""
+            echo "### 离线镜像包（本页下方 Assets 可直接下载）"
+            echo ""
+            echo "| 文件 | 适用 |"
+            echo "|------|------|"
+            echo "| \`meeko-console-${VERSION}-linux-amd64.tar.gz\` | x86_64 服务器（最常见） |"
+            echo "| \`meeko-console-${VERSION}-linux-arm64.tar.gz\` | ARM64 服务器（如甲骨文/群晖 ARM 机型） |"
+            echo "| \`SHA256SUMS.txt\` | 下载后校验完整性 |"
+            echo ""
+            echo '```bash'
+            echo "# 加载后镜像标签即 ghcr.io/${IMAGE}:${VERSION}"
+            echo "docker load -i meeko-console-${VERSION}-linux-amd64.tar.gz"
+            echo "sha256sum -c SHA256SUMS.txt"
+            echo '```'
             echo ""
             echo "### 部署"
             echo ""
@@ -195,3 +277,15 @@ jobs:
               --notes-file "${RUNNER_TEMP}/notes.md" \
               --verify-tag
           fi
+
+      - name: 上传镜像文件到 Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release upload "${GITHUB_REF_NAME}" \
+            assets/*.tar.gz \
+            assets/SHA256SUMS.txt \
+            --clobber
+          gh release view "${GITHUB_REF_NAME}" --json assets \
+            | jq -r '.assets[] | "\(.name)  \(.size) bytes"'

@@ -2,6 +2,17 @@
 
 版本号以仓库根目录的 [`VERSION`](./VERSION) 为准，镜像标签由 CI 自动按该版本生成。
 
+## 0.2.2 — 2026-11-27
+
+### 新增
+
+- **Release 附带镜像文件**：打 `v*` 标签后，CI 会把已推送的多架构镜像按平台导出成离线包，作为发行版资产上传：
+  - `meeko-console-<版本>-linux-amd64.tar.gz`
+  - `meeko-console-<版本>-linux-arm64.tar.gz`
+  - `SHA256SUMS.txt`
+- 新增 `export` job：按 `linux/amd64` / `linux/arm64` 矩阵并行 `docker pull` + `docker save`，产物经 artifact 传给发行 job，再 `gh release upload` 挂到对应 Release（`--clobber` 支持重复触发）。
+- 离线部署路径：`docker load -i …tar.gz` 即可得到 `ghcr.io/cnmeeko/meeko-console:<版本>`，无需外网拉取。
+
 ## 0.2.1 — 2026-11-27
 
 ### 新增

@@ -220,7 +220,26 @@ ghcr.io/cnmeeko/meeko-console:latest
 2. 提交并推送到 `main`；
 3. 打标签：`git tag v0.3.0 && git push origin v0.3.0`。
 
-推送标签后 CI 会做两件事：**构建多架构镜像并打上 `0.3.0` / `0.3` / `sha-…` 标签**，同时**自动创建 GitHub Release（发行版）**，说明里带 `docker pull` 命令、镜像摘要和部署片段 —— 所以「发行版」页面始终显示当前最新版本，不需要手工去点「Draft a new release」。重复推送同一标签时，会自动更新已有 Release 的说明而不是报错。
+推送标签后 CI 会做三件事：**构建多架构镜像并打上 `0.3.0` / `0.3` / `sha-…` 标签**，**把镜像按平台导出成离线包**，再**自动创建 GitHub Release（发行版）**并把离线包作为附件挂上去 —— 所以「发行版」页面始终显示当前最新版本，而且能直接下载到该版本的镜像文件，不用手工点「Draft a new release」。重复推送同一标签时会更新说明并覆盖同名附件。
+
+发行版附件（Assets）：
+
+| 文件 | 说明 |
+|------|------|
+| `meeko-console-<版本>-linux-amd64.tar.gz` | x86_64 服务器用的镜像离线包（`docker save` 产物） |
+| `meeko-console-<版本>-linux-arm64.tar.gz` | ARM64 服务器用（甲骨文 ARM、群晖 ARM 机型等） |
+| `SHA256SUMS.txt` | 两个包的 sha256，下载后校验 |
+
+内网 / 无外网服务器这样部署，不连 GHCR 也能跑：
+
+```bash
+docker load -i meeko-console-0.3.0-linux-amd64.tar.gz   # 按服务器架构选
+sha256sum -c SHA256SUMS.txt
+# 加载后镜像标签为 ghcr.io/cnmeeko/meeko-console:0.3.0
+docker tag ghcr.io/cnmeeko/meeko-console:0.3.0 meeko-console:latest
+```
+
+再把 `docker-compose.yml` 里的 `build:` 段删掉、保留 `image: meeko-console:latest`，`bash deploy.sh up` 就直接用它启动。
 
 
 首次使用需在仓库 **Settings → Actions → General → Workflow permissions** 中勾选 **Read and write permissions**，并在 **Packages** 设置中将镜像可见性设为 Public 或按需授权。
