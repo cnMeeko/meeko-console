@@ -265,6 +265,14 @@
           <div id="npsUdp"><div class="empty">还没有 UDP 隧道</div></div>
         </div>
 
+        <div class="ddns-sec" id="npsOtherSec" hidden>
+          <div class="nps-toolbar">
+            <b>其它隧道（socks5 / http 等，由 NPS 原生保留）</b>
+          </div>
+          <p class="desc" style="margin:0 0 8px">这些记录来自非本面板创建的隧道（例如从原生 NPS 迁移过来），只读展示，可删除；要新建或编辑请用 NPS 原生配置或改回 TCP/UDP。</p>
+          <div id="npsOther"></div>
+        </div>
+
         <p class="ddns-hint">
           批量添加：每行一条 <code>端口 目标地址 备注</code>，例如 <code>9001 127.0.0.1:22 内网 SSH</code>。<br>
           服务器防火墙需要放行桥接端口与各隧道端口（UDP 隧道同时放行 udp）。
@@ -922,6 +930,7 @@
     renderNpsClients();
     renderNpsTunnels('tcp');
     renderNpsTunnels('udp');
+    renderNpsOther();
     var logs = (npsState && npsState.logs) || [];
     var box = $('npsLogs');
     box.textContent = logs.length ? logs.join('\n') : '暂无日志';
@@ -974,8 +983,31 @@
       + '</tbody></table></div>';
   }
 
-  function npsSelected(mode) {
-    var box = $(mode === 'tcp' ? 'npsTcp' : 'npsUdp');
+  function renderNpsOther() {
+    var list = (npsState && npsState.tunnels && npsState.tunnels.other) || [];
+    var sec = $('npsOtherSec');
+    var box = $('npsOther');
+    if (!sec || !box) return;
+    if (!list.length) { sec.hidden = true; box.innerHTML = ''; return; }
+    sec.hidden = false;
+    box.innerHTML = '<div class="nt-wrap"><table class="nt"><thead><tr>'
+      + '<th>类型</th><th>端口</th><th>目标</th><th>客户端</th><th>备注</th><th>状态</th><th>操作</th>'
+      + '</tr></thead><tbody>'
+      + list.map(function (t) {
+        return '<tr>'
+          + '<td>' + esc((t.mode || '').toUpperCase()) + '</td>'
+          + '<td>' + esc(t.serverIp) + ':' + t.port + '</td>'
+          + '<td class="wrap">' + esc(t.target || '—') + '</td>'
+          + '<td>' + esc(t.clientRemark) + '</td>'
+          + '<td class="wrap">' + esc(t.remark) + '</td>'
+          + '<td>' + (t.status ? '启用' : '停用') + '</td>'
+          + '<td><button class="btn danger" data-other-del="' + t.id + '" type="button">删除</button></td>'
+          + '</tr>';
+      }).join('')
+      + '</tbody></table></div>';
+  }
+
+  function npsSelected(mode) {    var box = $(mode === 'tcp' ? 'npsTcp' : 'npsUdp');
     var nodes = box.querySelectorAll('input[data-check="' + mode + '"]:checked');
     return Array.prototype.map.call(nodes, function (n) { return Number(n.value); });
   }
@@ -1573,8 +1605,17 @@
     if (batchDel) { batchDeleteNpsTunnels(batchDel); return; }
     var tunEdit = t.getAttribute('data-tun-edit');
     if (tunEdit) { openNpsTunnel(t.getAttribute('data-mode'), npsTunnelById(tunEdit)); return; }
-    var tunDel = t.getAttribute('data-tun-del');
-    if (tunDel) {
+    var otherDel = t.getAttribute('data-other-del');
+    if (otherDel) {
+      if (!confirm('确定删除这条隧道吗？（socks5 等其它模式）')) return;
+      request('/nps/tunnels?ids=' + otherDel, { method: 'DELETE' }).then(function (res) {
+        if (!res.ok) throw new Error((res.data && res.data.message) || '删除失败');
+        applyNpsState(res.data);
+        npsMsg('隧道已删除');
+      }).catch(function (e) { npsMsg(e.message, true); });
+      return;
+    }
+    var tunDel = t.getAttribute('data-tun-del');    if (tunDel) {
       if (!confirm('确定删除这条隧道吗？')) return;
       request('/nps/tunnels?ids=' + tunDel, { method: 'DELETE' }).then(function (res) {
         if (!res.ok) throw new Error((res.data && res.data.message) || '删除失败');

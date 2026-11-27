@@ -541,7 +541,12 @@ function state() {
       .map(function (c) { return publicClient(c, tunnels); }),
     tunnels: {
       tcp: sortTunnels(tunnels, 'tcp').map(publicTunnel),
-      udp: sortTunnels(tunnels, 'udp').map(publicTunnel)
+      udp: sortTunnels(tunnels, 'udp').map(publicTunnel),
+      // socks5 / http 等其它模式：本面板不提供编辑，但迁移过来的记录需要能看到、能删除
+      other: tunnels.filter(function (t) {
+        const mode = String(t.Mode || '').toLowerCase();
+        return mode !== 'tcp' && mode !== 'udp';
+      }).sort(function (a, b) { return Number(a.Id) - Number(b.Id); }).map(publicTunnel)
     },
     logs: logs.slice(-200)
   };
