@@ -960,7 +960,7 @@
     var box = $('npsClients');
     if (!list.length) { box.innerHTML = '<div class="empty">还没有客户端，请先添加一个</div>'; return; }
     box.innerHTML = list.map(function (c) {
-      var meta = ['vkey ' + c.vkey, '隧道 ' + c.tunnelCount + ' 条', '最大连接 ' + (c.maxConn || '不限')];
+      var meta = ['ID ' + c.id, 'vkey ' + c.vkey, '隧道 ' + c.tunnelCount + ' 条', '最大连接 ' + (c.maxConn || '不限')];
       if (c.maxTunnelNum) meta.push('最大隧道 ' + c.maxTunnelNum);
       return '<div class="row"><div class="main"><b>' + esc(c.remark) + '</b>'
         + '<span class="badge ' + (c.status ? 'valid' : 'expired') + '">' + (c.status ? '启用' : '停用') + '</span>'
@@ -1005,7 +1005,7 @@
           + '<td><input type="checkbox" data-check="' + mode + '" value="' + t.id + '"></td>'
           + '<td>' + npsListenCell(t) + '</td>'
           + '<td class="wrap">' + esc(t.target) + '</td>'
-          + '<td>' + esc(t.clientRemark) + '</td>'
+          + '<td>' + esc(t.clientRemark) + (t.clientId ? ' <span class="meta">#' + t.clientId + '</span>' : '') + '</td>'
           + '<td class="wrap">' + esc(t.remark) + (t.password ? ' <span class="nps-chip">有密码</span>' : '') + '</td>'
           + '<td>' + (t.status ? '启用' : '停用') + '</td>'
           + '<td>'
@@ -1031,7 +1031,7 @@
           + '<td>' + esc((t.mode || '').toUpperCase()) + '</td>'
           + '<td>' + npsListenCell(t) + '</td>'
           + '<td class="wrap">' + esc(t.target || '—') + '</td>'
-          + '<td>' + esc(t.clientRemark) + '</td>'
+          + '<td>' + esc(t.clientRemark) + (t.clientId ? ' <span class="meta">#' + t.clientId + '</span>' : '') + '</td>'
           + '<td class="wrap">' + esc(t.remark) + '</td>'
           + '<td>' + (t.status ? '启用' : '停用') + '</td>'
           + '<td><button class="btn danger" data-other-del="' + t.id + '" type="button">删除</button></td>'
@@ -1082,7 +1082,9 @@
 
   function openNpsClient(client) {
     npsEditingClient = client || null;
-    $('npsClientTitle').textContent = npsEditingClient ? '编辑客户端' : '添加客户端';
+    $('npsClientTitle').textContent = npsEditingClient
+      ? '编辑客户端（ID ' + npsEditingClient.id + '）'
+      : '添加客户端';
     $('npcRemark').value = npsEditingClient ? npsEditingClient.remark : '';
     $('npcVkey').value = npsEditingClient ? npsEditingClient.vkey : '';
     $('npcMaxConn').value = npsEditingClient ? npsEditingClient.maxConn : 0;

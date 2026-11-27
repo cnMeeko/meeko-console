@@ -6,7 +6,7 @@
 
 一个容器搞定 **SSL 证书自动签发/续期**、**DDNS 动态解析**、**EasyTier 组网**、**NPS 内网穿透**，全部在同一个 Web 控制台里配置。
 
-基于 Caddy + Node.js + NPS，单镜像、单容器，开箱即用。当前版本 **0.3.4**（见 [`VERSION`](./VERSION)，变更记录见 [`CHANGELOG.md`](./CHANGELOG.md)）。
+基于 Caddy + Node.js + NPS，单镜像、单容器，开箱即用。当前版本 **0.3.5**（见 [`VERSION`](./VERSION)，变更记录见 [`CHANGELOG.md`](./CHANGELOG.md)）。
 
 > 本镜像带 `meeko.role=server` / `meeko.edition=server` 标签，是**服务端版**（内置 NPS 服务端、EasyTier 服务端与 Caddy），面相部署在服务器上使用。用 `docker inspect` 可确认：
 
