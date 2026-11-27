@@ -384,7 +384,7 @@
   <div class="dialog">
     <h3 id="npsTunnelTitle">添加 TCP 隧道</h3>
     <div class="field"><label>所属客户端</label><select id="npTunClient"></select></div>
-    <div class="field"><label>服务器监听 IP</label><input id="npTunServerIp" value="0.0.0.0" autocomplete="off"></div>
+    <div class="field"><label>服务器监听 IP（0.0.0.0 表示全部网卡）</label><input id="npTunServerIp" value="0.0.0.0" autocomplete="off"></div>
     <div class="field"><label>服务器端口</label><input id="npTunPort" placeholder="如 9001" autocomplete="off"></div>
     <div class="field"><label>目标地址（内网 IP:端口）</label><input id="npTunTarget" placeholder="如 127.0.0.1:22" autocomplete="off"></div>
     <div class="field"><label>备注（可选）</label><input id="npTunRemark" placeholder="如 内网 SSH" autocomplete="off"></div>
@@ -509,9 +509,9 @@
         }, 5000);
       }
     }
-    if (nps && !npsLoaded) {
+    if (nps) {
+      // 每次进入都拉一次；失败时保留可重试状态
       loadNps(true);
-      npsLoaded = true;
     }
     if (backup && !backupLoaded) {
       loadBackup();
@@ -876,7 +876,25 @@
   function applyNpsState(data) {
     if (!data || !data.tunnels) return;
     npsState = data;
-    renderNps(false);
+    npsLoaded = true;
+    // 操作成功后回填配置输入框，避免一直显示占位提示
+    renderNps(true);
+  }
+
+  function loadNps(populate) {
+    if (!npsState) $('npsStatus').innerHTML = '正在读取…';
+    return request('/nps').then(function (res) {
+      if (!res.ok) throw new Error((res.data && res.data.message) || '读取失败');
+      if (!res.data || !res.data.tunnels) throw new Error('返回数据不完整');
+      npsState = res.data;
+      npsLoaded = true;
+      renderNps(populate !== false);
+      npsMsg('');
+    }).catch(function (e) {
+      $('npsStatus').innerHTML = '状态：<b class="off">读取失败</b> · ' + esc(e.message);
+      npsMsg('读取失败：' + e.message + '（可点「刷新状态」重试）', true);
+      npsLoaded = false;
+    });
   }
 
   function npsClientOptions(placeholder) {
@@ -956,6 +974,21 @@
     }).join('');
   }
 
+  function npsListenHost(serverIp) {
+    var cfg = (npsState && npsState.config) || {};
+    var ip = String(serverIp || '').trim();
+    // 0.0.0.0 表示监听全部网卡，展示成服务器实际地址更直观
+    if (!ip || ip === '0.0.0.0' || ip === '::' || ip === '[::]') return cfg.publicAddr || cfg.autoAddr || '';
+    return ip;
+  }
+
+  function npsListenCell(t) {
+    var ip = String(t.serverIp || '').trim();
+    var all = (!ip || ip === '0.0.0.0' || ip === '::' || ip === '[::]');
+    var host = npsListenHost(ip);
+    return (host ? esc(host) + ':' + t.port : '全部网卡:' + t.port) + (all ? ' <span class="nps-chip">全网卡</span>' : '');
+  }
+
   function renderNpsTunnels(mode) {
     var list = npsTunnelList(mode);
     var box = $(mode === 'tcp' ? 'npsTcp' : 'npsUdp');
@@ -970,7 +1003,7 @@
       + list.map(function (t) {
         return '<tr>'
           + '<td><input type="checkbox" data-check="' + mode + '" value="' + t.id + '"></td>'
-          + '<td>' + esc(t.serverIp) + ':' + t.port + '</td>'
+          + '<td>' + npsListenCell(t) + '</td>'
           + '<td class="wrap">' + esc(t.target) + '</td>'
           + '<td>' + esc(t.clientRemark) + '</td>'
           + '<td class="wrap">' + esc(t.remark) + (t.password ? ' <span class="nps-chip">有密码</span>' : '') + '</td>'
@@ -996,7 +1029,7 @@
       + list.map(function (t) {
         return '<tr>'
           + '<td>' + esc((t.mode || '').toUpperCase()) + '</td>'
-          + '<td>' + esc(t.serverIp) + ':' + t.port + '</td>'
+          + '<td>' + npsListenCell(t) + '</td>'
           + '<td class="wrap">' + esc(t.target || '—') + '</td>'
           + '<td>' + esc(t.clientRemark) + '</td>'
           + '<td class="wrap">' + esc(t.remark) + '</td>'
@@ -1007,7 +1040,8 @@
       + '</tbody></table></div>';
   }
 
-  function npsSelected(mode) {    var box = $(mode === 'tcp' ? 'npsTcp' : 'npsUdp');
+  function npsSelected(mode) {
+    var box = $(mode === 'tcp' ? 'npsTcp' : 'npsUdp');
     var nodes = box.querySelectorAll('input[data-check="' + mode + '"]:checked');
     return Array.prototype.map.call(nodes, function (n) { return Number(n.value); });
   }
