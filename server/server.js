@@ -438,6 +438,15 @@ async function handle(req, res, route, url) {
     return send(res, 200, nps.state());
   }
 
+  // 客户端在线 / 离线：实时向 NPS 管理接口取值
+  if (route === '/nps/online' && req.method === 'GET') {
+    try {
+      return send(res, 200, await nps.online());
+    } catch (e) {
+      return send(res, 500, { message: e.message });
+    }
+  }
+
   if (route === '/nps/config' && req.method === 'PUT') {
     const body = await readBody(req);
     try {
