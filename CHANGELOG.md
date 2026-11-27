@@ -2,7 +2,19 @@
 
 版本号以仓库根目录的 [`VERSION`](./VERSION) 为准，镜像标签由 CI 自动按该版本生成。
 
+## 0.2.3 — 2026-11-27
+
+### 修复
+
+- 镜像导出改用 **skopeo**（`docker://` → `docker-archive:`），替代 `docker pull --platform` + `docker save`。
+  原因：多架构镜像在 runner 的 containerd 镜像存储里只落单平台 manifest，`docker save` 会报
+  `unable to create manifests file: NotFound: content digest sha256:…: not found`（arm64 导出因此失败，发行版被跳过）。
+- 导出时显式写入 `<仓库>:<版本>` 引用，`manifest.json` 的 `RepoTags` 不再为空，`docker load` 后镜像直接带正确标签，无需手工 retag。
+- 附带收益：不依赖 docker 守护进程，导出更稳、也不再重复拉取到本地镜像库。
+
 ## 0.2.2 — 2026-11-27
+
+> 注：本版 CI 的导出步骤有缺陷（见 0.2.3），镜像虽已推送但发行版未生成，请直接使用 0.2.3。
 
 ### 新增
 

@@ -12,7 +12,7 @@ FROM ${NODE_IMAGE} AS node
 FROM ${ALPINE_IMAGE}
 
 # 版本号由 CI 读取 VERSION 文件传入，本地构建时用默认值
-ARG VERSION=0.2.2
+ARG VERSION=0.2.3
 LABEL org.opencontainers.image.title="meeko-console" \
       org.opencontainers.image.description="Meeko 面板 — SSL 证书 + DDNS + EasyTier 一体化控制台" \
       org.opencontainers.image.source="https://github.com/cnMeeko/meeko-console" \
