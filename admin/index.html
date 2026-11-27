@@ -95,6 +95,14 @@
   .nps-toolbar .btns { display:flex; gap:8px; flex-wrap:wrap; }
   .nps-toolbar .btn { padding:6px 12px; font-size:13px; }
   .nps-chip { display:inline-block; margin-right:6px; padding:1px 7px; border-radius:6px; background:#eef4ff; color:var(--primary); font-size:12px; }
+  .nps-sw { display:inline-flex; align-items:center; gap:6px; padding:0; border:0; background:none; cursor:pointer; font-size:12.5px; color:#94a3b8; }
+  .nps-sw .track { position:relative; width:34px; height:18px; border-radius:999px; background:#cbd5e1; transition:background .16s; }
+  .nps-sw .track i { position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background:#fff; transition:left .16s; }
+  .nps-sw.on { color:var(--ok); }
+  .nps-sw.on .track { background:var(--ok); }
+  .nps-sw.on .track i { left:18px; }
+  .nps-sw:disabled { opacity:.5; cursor:wait; }
+  .nps-cid { font-weight:600; color:var(--primary); }
 </style>
 </head>
 <body>
@@ -275,6 +283,8 @@
 
         <p class="ddns-hint">
           批量添加：每行一条 <code>端口 目标地址 备注</code>，例如 <code>9001 127.0.0.1:22 内网 SSH</code>。<br>
+          状态列的开关可直接启用 / 停用隧道，也可在编辑弹窗里设置；停用的隧道保留配置但不转发。<br>
+          改动隧道或客户端（含状态开关）后 NPS 会重启一次，客户端会自动重连。<br>
           服务器防火墙需要放行桥接端口与各隧道端口（UDP 隧道同时放行 udp）。
         </p>
         <details style="margin-top:14px">
@@ -372,6 +382,12 @@
     <div class="field"><label>验证密钥 vkey（留空自动生成）</label><input id="npcVkey" placeholder="字母数字，1-32 位" autocomplete="off"></div>
     <div class="field"><label>最大连接数（0 不限制）</label><input id="npcMaxConn" value="0" autocomplete="off"></div>
     <div class="field"><label>最大隧道数（0 不限制）</label><input id="npcMaxTunnel" value="0" autocomplete="off"></div>
+    <div class="field"><label>状态（停用后客户端无法连上桥接端口）</label>
+      <select id="npcStatus">
+        <option value="1">启用</option>
+        <option value="0">停用</option>
+      </select>
+    </div>
     <div class="foot">
       <button class="btn" id="btnNpcCancel" type="button">取消</button>
       <button class="btn primary" id="btnNpcSave" type="button">保存</button>
@@ -389,6 +405,12 @@
     <div class="field"><label>目标地址（内网 IP:端口）</label><input id="npTunTarget" placeholder="如 127.0.0.1:22" autocomplete="off"></div>
     <div class="field"><label>备注（可选）</label><input id="npTunRemark" placeholder="如 内网 SSH" autocomplete="off"></div>
     <div class="field"><label>访问密码（可选）</label><input id="npTunPassword" autocomplete="off" placeholder="留空不需要密码"></div>
+    <div class="field"><label>运行状态（停用后该端口不再转发）</label>
+      <select id="npTunStatus">
+        <option value="1">启用</option>
+        <option value="0">停用</option>
+      </select>
+    </div>
     <div class="foot">
       <button class="btn" id="btnNpTunCancel" type="button">取消</button>
       <button class="btn primary" id="btnNpTunSave" type="button">保存</button>
@@ -963,7 +985,7 @@
       var meta = ['ID ' + c.id, 'vkey ' + c.vkey, '隧道 ' + c.tunnelCount + ' 条', '最大连接 ' + (c.maxConn || '不限')];
       if (c.maxTunnelNum) meta.push('最大隧道 ' + c.maxTunnelNum);
       return '<div class="row"><div class="main"><b>' + esc(c.remark) + '</b>'
-        + '<span class="badge ' + (c.status ? 'valid' : 'expired') + '">' + (c.status ? '启用' : '停用') + '</span>'
+        + npsSwitch(c.status, 'data-npc-status="' + c.id + '"', '点击' + (c.status ? '停用' : '启用') + '该客户端')
         + '<span class="meta">' + esc(meta.join(' · ')) + '</span>'
         + '<span class="meta">' + esc(npsCommand(c)) + '</span></div>'
         + '<div class="actions">'
@@ -972,6 +994,12 @@
         + '<button class="btn danger" data-npc-del="' + c.id + '" type="button">删除</button>'
         + '</div></div>';
     }).join('');
+  }
+
+  // 状态开关：启用 / 停用，点一下就切换（后端会改 NPS 记录并重启进程）
+  function npsSwitch(on, attrs, title) {
+    return '<button class="nps-sw' + (on ? ' on' : '') + '" ' + (attrs || '') + ' type="button" title="' + esc(title || '') + '">'
+      + '<span class="track"><i></i></span><span class="label">' + (on ? '启用' : '停用') + '</span></button>';
   }
 
   function npsListenHost(serverIp) {
@@ -998,16 +1026,17 @@
     }
     box.innerHTML = '<div class="nt-wrap"><table class="nt"><thead><tr>'
       + '<th style="width:34px"><input type="checkbox" data-check-all="' + mode + '"></th>'
-      + '<th>端口</th><th>目标</th><th>客户端</th><th>备注</th><th>状态</th><th>操作</th>'
+      + '<th>端口</th><th>目标</th><th>客户端</th><th>客户端ID</th><th>备注</th><th>状态</th><th>操作</th>'
       + '</tr></thead><tbody>'
       + list.map(function (t) {
         return '<tr>'
           + '<td><input type="checkbox" data-check="' + mode + '" value="' + t.id + '"></td>'
           + '<td>' + npsListenCell(t) + '</td>'
           + '<td class="wrap">' + esc(t.target) + '</td>'
-          + '<td>' + esc(t.clientRemark) + (t.clientId ? ' <span class="meta">#' + t.clientId + '</span>' : '') + '</td>'
+          + '<td>' + (t.clientRemark ? esc(t.clientRemark) : '<span class="meta">未命名</span>') + '</td>'
+          + '<td><span class="nps-chip nps-cid">#' + (t.clientId || 0) + '</span></td>'
           + '<td class="wrap">' + esc(t.remark) + (t.password ? ' <span class="nps-chip">有密码</span>' : '') + '</td>'
-          + '<td>' + (t.status ? '启用' : '停用') + '</td>'
+          + '<td>' + npsSwitch(t.status, 'data-tun-status="' + t.id + '" data-mode="' + mode + '"', '点击' + (t.status ? '停用' : '启用') + '该隧道') + '</td>'
           + '<td>'
           + '<button class="btn" data-tun-edit="' + t.id + '" data-mode="' + mode + '" type="button">编辑</button>'
           + '<button class="btn danger" data-tun-del="' + t.id + '" data-mode="' + mode + '" type="button">删除</button>'
@@ -1089,6 +1118,7 @@
     $('npcVkey').value = npsEditingClient ? npsEditingClient.vkey : '';
     $('npcMaxConn').value = npsEditingClient ? npsEditingClient.maxConn : 0;
     $('npcMaxTunnel').value = npsEditingClient ? (npsEditingClient.maxTunnelNum || 0) : 0;
+    $('npcStatus').value = npsEditingClient ? (npsEditingClient.status ? '1' : '0') : '1';
     $('npsClientMask').classList.add('show');
     $('npcRemark').focus();
   }
@@ -1098,7 +1128,8 @@
       remark: $('npcRemark').value.trim(),
       vkey: $('npcVkey').value.trim(),
       maxConn: Number($('npcMaxConn').value || 0),
-      maxTunnelNum: Number($('npcMaxTunnel').value || 0)
+      maxTunnelNum: Number($('npcMaxTunnel').value || 0),
+      status: $('npcStatus').value === '1'
     };
     if (npsEditingClient) payload.id = npsEditingClient.id;
     $('btnNpcSave').disabled = true;
@@ -1126,6 +1157,41 @@
     }).catch(function (e) { npsMsg(e.message, true); });
   }
 
+  // 列表里的状态开关：点一下直接切换启用 / 停用
+  function npsTunnelSwitch(id, on, btn) {
+    if (btn) btn.disabled = true;
+    npsMsg('正在' + (on ? '启用' : '停用') + '隧道 #' + id + '，NPS 会重启一次…');
+    request('/nps/tunnels', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: [Number(id)], patch: { status: !!on } })
+    }).then(function (res) {
+      if (!res.ok) throw new Error((res.data && res.data.message) || '切换状态失败');
+      applyNpsState(res.data);
+      npsMsg('隧道 #' + id + ' 已' + (on ? '启用' : '停用'));
+    }).catch(function (e) {
+      if (btn) btn.disabled = false;
+      npsMsg(e.message, true);
+    });
+  }
+
+  function npsClientSwitch(id, on, btn) {
+    if (btn) btn.disabled = true;
+    npsMsg('正在' + (on ? '启用' : '停用') + '客户端 #' + id + '，NPS 会重启一次…');
+    request('/nps/clients', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: Number(id), status: !!on })
+    }).then(function (res) {
+      if (!res.ok) throw new Error((res.data && res.data.message) || '切换状态失败');
+      applyNpsState(res.data);
+      npsMsg('客户端 #' + id + ' 已' + (on ? '启用' : '停用'));
+    }).catch(function (e) {
+      if (btn) btn.disabled = false;
+      npsMsg(e.message, true);
+    });
+  }
+
   function openNpsTunnel(mode, tunnel) {
     npsBatchMode = mode;
     npsEditingTunnel = tunnel || null;
@@ -1138,6 +1204,7 @@
     $('npTunTarget').value = npsEditingTunnel ? npsEditingTunnel.target : '';
     $('npTunRemark').value = npsEditingTunnel ? npsEditingTunnel.remark : '';
     $('npTunPassword').value = npsEditingTunnel ? npsEditingTunnel.password : '';
+    $('npTunStatus').value = npsEditingTunnel ? (npsEditingTunnel.status ? '1' : '0') : '1';
     if (clientId) $('npTunClient').value = String(clientId);
     $('npsTunnelMask').classList.add('show');
     $('npTunPort').focus();
@@ -1149,6 +1216,7 @@
     var serverIp = $('npTunServerIp').value.trim() || '0.0.0.0';
     var remark = $('npTunRemark').value.trim();
     var password = $('npTunPassword').value;
+    var status = $('npTunStatus').value !== '0';
     var clientId = $('npTunClient').value;
     if (!port) { npsMsg('请填写服务器端口', true); return; }
     if (!target) { npsMsg('请填写目标地址', true); return; }
@@ -1161,7 +1229,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ids: [edit.id],
-          patch: { port: port, target: target, serverIp: serverIp, remark: remark, password: password }
+          patch: { port: port, target: target, serverIp: serverIp, remark: remark, password: password, status: status }
         })
       })
       : request('/nps/tunnels', {
@@ -1170,7 +1238,7 @@
         body: JSON.stringify({
           mode: npsBatchMode,
           clientId: clientId,
-          items: [{ port: port, target: target, serverIp: serverIp, remark: remark, password: password }]
+          items: [{ port: port, target: target, serverIp: serverIp, remark: remark, password: password, status: status }]
         })
       });
     req.then(function (res) {
@@ -1618,6 +1686,11 @@
     if (clientEdit) { openNpsClient(npsClientById(clientEdit)); return; }
     var clientDel = t.getAttribute('data-npc-del');
     if (clientDel) { removeNpsClient(clientDel); return; }
+    var clientSw = t.closest ? t.closest('[data-npc-status]') : null;
+    if (clientSw) {
+      npsClientSwitch(clientSw.getAttribute('data-npc-status'), !clientSw.classList.contains('on'), clientSw);
+      return;
+    }
     var clientCmd = t.getAttribute('data-npc-cmd');
     if (clientCmd) {
       var c = npsClientById(clientCmd);
@@ -1639,6 +1712,11 @@
     if (batchEdit) { openNpsBatchEdit(batchEdit); return; }
     var batchDel = t.getAttribute('data-nps-batch-del');
     if (batchDel) { batchDeleteNpsTunnels(batchDel); return; }
+    var tunSw = t.closest ? t.closest('[data-tun-status]') : null;
+    if (tunSw) {
+      npsTunnelSwitch(tunSw.getAttribute('data-tun-status'), !tunSw.classList.contains('on'), tunSw);
+      return;
+    }
     var tunEdit = t.getAttribute('data-tun-edit');
     if (tunEdit) { openNpsTunnel(t.getAttribute('data-mode'), npsTunnelById(tunEdit)); return; }
     var otherDel = t.getAttribute('data-other-del');
