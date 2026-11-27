@@ -1,11 +1,12 @@
 # Meeko 面板 — SSL 证书 + DDNS + EasyTier 一体化控制台
 
 [![version](https://img.shields.io/github/v/tag/cnMeeko/meeko-console?label=version&color=blue)](https://github.com/cnMeeko/meeko-console/tags)
+[![release](https://img.shields.io/github/v/release/cnMeeko/meeko-console?label=release&color=brightgreen)](https://github.com/cnMeeko/meeko-console/releases)
 [![build](https://github.com/cnMeeko/meeko-console/actions/workflows/docker-build.yml/badge.svg)](https://github.com/cnMeeko/meeko-console/actions/workflows/docker-build.yml)
 
 一个容器搞定 **SSL 证书自动签发/续期**、**DDNS 动态解析**、**EasyTier 组网**，全部在同一个 Web 控制台里配置。
 
-基于 Caddy + Node.js，单镜像、单容器，开箱即用。当前版本 **0.2.0**（见 [`VERSION`](./VERSION)，变更记录见 [`CHANGELOG.md`](./CHANGELOG.md)）。
+基于 Caddy + Node.js，单镜像、单容器，开箱即用。当前版本 **0.2.1**（见 [`VERSION`](./VERSION)，变更记录见 [`CHANGELOG.md`](./CHANGELOG.md)）。
 
 ---
 
@@ -206,12 +207,21 @@ ghcr.io/cnmeeko/meeko-console:latest
 
 | 标签 | 示例 | 说明 |
 |------|------|------|
-| 完整版本 | `0.2.0` | 与 `VERSION` / git tag 一致 |
+| 完整版本 | `0.2.1` | 与 `VERSION` / git tag 一致 |
 | 主次版本 | `0.2` | 便于只跟随次版本更新 |
 | `latest` | `latest` | 仅默认分支（main）构建时生成 |
 | 提交号 | `sha-1a2b3c4` | 便于回溯到具体提交 |
 
-> 打 `v*` 标签触发时，以标签号作为版本，`VERSION` 文件仅作为普通分支构建的版本来源。发版流程：改 `VERSION` → 提交 → 打 `v0.2.0` 标签 → 两者都会出同一版本镜像。
+> 打 `v*` 标签触发时，以标签号作为版本，`VERSION` 文件仅作为普通分支构建的版本来源。
+
+### 发版流程
+
+1. 改 `VERSION`（如 `0.3.0`）并更新 `CHANGELOG.md`；
+2. 提交并推送到 `main`；
+3. 打标签：`git tag v0.3.0 && git push origin v0.3.0`。
+
+推送标签后 CI 会做两件事：**构建多架构镜像并打上 `0.3.0` / `0.3` / `sha-…` 标签**，同时**自动创建 GitHub Release（发行版）**，说明里带 `docker pull` 命令、镜像摘要和部署片段 —— 所以「发行版」页面始终显示当前最新版本，不需要手工去点「Draft a new release」。重复推送同一标签时，会自动更新已有 Release 的说明而不是报错。
+
 
 首次使用需在仓库 **Settings → Actions → General → Workflow permissions** 中勾选 **Read and write permissions**，并在 **Packages** 设置中将镜像可见性设为 Public 或按需授权。
 
