@@ -19,8 +19,8 @@ docker inspect ghcr.io/cnmeeko/meeko-console:latest \
 
 ## ✨ 功能特性
 
-- **SSL 证书管理**：Caddy 自动向 Let's Encrypt 申请并续期（90 天），支持为每个域名配置反向代理目标。
 - **DDNS 动态解析**：内置支持阿里云、腾讯云、Cloudflare、Spaceship，可同时配置多个服务商，IPv4 / IPv6 分别管理。
+- **SSL 证书管理**：Caddy 自动向 Let's Encrypt 申请并续期（90 天），支持为每个域名配置反向代理目标。
 - **EasyTier 组网**：内置 EasyTier 服务端，控制台内可配置主机名、网络、密码、虚拟 IP、监听端口等。
 - **NPS 内网穿透**：内置 NPS 服务端（0.26.x），客户端用 vkey 连上桥接端口后，把内网 TCP / UDP 服务映射到服务器；隧道支持批量添加、批量编辑、批量删除。
 - **备份与恢复**：支持本地导入/导出配置，以及七牛云 Kodo 对象存储备份（含区域选择），NPS 的客户端与隧道数据一并备份。

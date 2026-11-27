@@ -138,28 +138,14 @@
     </div>
 
     <div class="tabs">
-      <button class="tab active" id="tabSsl" type="button">SSL 证书</button>
-      <button class="tab" id="tabDdns" type="button">DDNS 动态解析</button>
+      <button class="tab active" id="tabDdns" type="button">DDNS 动态解析</button>
+      <button class="tab" id="tabSsl" type="button">SSL 证书</button>
       <button class="tab" id="tabEt" type="button">EasyTier 组网</button>
       <button class="tab" id="tabNps" type="button">NPS 内网穿透</button>
       <button class="tab" id="tabBackup" type="button">备份与恢复</button>
     </div>
 
-    <div id="sslPanel">
-      <div class="card">
-        <div class="toolbar">
-          <span class="desc" style="margin:0" id="summary">加载中…</span>
-          <span>
-            <button class="btn" id="btnRefresh" type="button">刷新</button>
-            <button class="btn primary" id="btnAdd" type="button">添加域名</button>
-          </span>
-        </div>
-        <div id="list"><div class="empty">加载中…</div></div>
-        <p class="msg" id="msg"></p>
-      </div>
-    </div>
-
-    <div id="ddnsPanel" hidden>
+    <div id="ddnsPanel">
       <div class="card">
         <div class="toolbar">
           <div>
@@ -187,6 +173,21 @@
         </details>
       </div>
     </div>
+
+    <div id="sslPanel" hidden>
+      <div class="card">
+        <div class="toolbar">
+          <span class="desc" style="margin:0" id="summary">加载中…</span>
+          <span>
+            <button class="btn" id="btnRefresh" type="button">刷新</button>
+            <button class="btn primary" id="btnAdd" type="button">添加域名</button>
+          </span>
+        </div>
+        <div id="list"><div class="empty">加载中…</div></div>
+        <p class="msg" id="msg"></p>
+      </div>
+    </div>
+
 
     <div id="etPanel" hidden>
       <div class="card">
@@ -1582,7 +1583,7 @@
     $('editionBadge').hidden = edition !== 'server';
     $('loginView').hidden = true;
     $('mainView').hidden = false;
-    switchTab('ssl');
+    switchTab('ddns');
     load();
   }
 
