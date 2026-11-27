@@ -68,6 +68,11 @@
   .msg.bad { color:var(--bad); }
   .mask { position:fixed; inset:0; background:rgba(15,23,42,.45); display:none; align-items:center; justify-content:center; padding:16px; z-index:20; }
   .mask.show { display:flex; }
+  .link-row { text-align:center; margin-top:10px; }
+  .link-btn { border:0; background:none; padding:4px 6px; color:var(--primary); font-size:13px; cursor:pointer; }
+  .link-btn:hover { text-decoration:underline; }
+  .cmd-box { margin:8px 0 0; padding:12px; border-radius:10px; background:#0f172a; color:#e2e8f0; font-family:ui-monospace,SFMono-Regular,Consolas,"Courier New",monospace; font-size:12.5px; line-height:1.7; white-space:pre-wrap; word-break:break-all; user-select:all; }
+  .dialog .desc code { background:#f1f5f9; padding:1px 5px; border-radius:4px; font-size:12.5px; color:#334155; }
   .dialog { width:100%; max-width:420px; background:#fff; border-radius:14px; padding:20px; }
   .dialog h3 { margin:0 0 14px; font-size:17px; }
   .field { margin-bottom:12px; }
@@ -120,6 +125,7 @@
     <div class="field"><label>用户名</label><input id="loginUser" value="admin" autocomplete="username"></div>
     <div class="field"><label>密码</label><input id="loginPass" type="password" placeholder="请输入密码" autocomplete="current-password"></div>
     <button class="btn primary" id="btnLogin" type="button">登录</button>
+    <div class="link-row"><button class="link-btn" id="btnForgot" type="button">忘记账号密码？</button></div>
     <p class="msg" id="loginMsg"></p>
   </div>
 
@@ -384,6 +390,22 @@
     <div class="foot">
       <button class="btn" id="btnAccCancel" type="button">取消</button>
       <button class="btn primary" id="btnAccSave" type="button">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 忘记账号密码 -->
+<div class="mask" id="forgotMask">
+  <div class="dialog">
+    <h3>忘记账号密码</h3>
+    <p class="desc">面板账号存在容器内的 <code>/console-data/account.json</code>，里面只保存加盐哈希，所以密码找不回来，只能重设。</p>
+    <p class="desc" style="margin-top:8px">在服务器终端（SSH 登录到部署面板的机器）执行下面这条命令，把 <code>admin</code> 和 <code>你的新密码</code> 换成你要用的账号密码：</p>
+    <pre class="cmd-box" id="forgotCmd"></pre>
+    <p class="desc" style="margin-top:10px">执行后立即生效，不用重启容器，回到登录框用新账号登录即可。<br>
+      容器名如果不是 <code>meeko-console</code>，先用 <code>docker ps</code> 查实际名称再替换；用 compose 部署时也可把 <code>docker exec meeko-console</code> 换成 <code>docker compose exec console</code>（在面板目录里执行）。</p>
+    <div class="foot">
+      <button class="btn" id="btnForgotCopy" type="button">复制指令</button>
+      <button class="btn primary" id="btnForgotClose" type="button">知道了</button>
     </div>
   </div>
 </div>
@@ -1622,6 +1644,13 @@
     }).then(function () { $('btnLogin').disabled = false; });
   }
 
+  /* 忘记账号密码：弹窗给出容器内重设账号的指令 */
+  function forgotCmd() {
+    return 'docker exec meeko-console node -e "const c=require(\'crypto\'),f=require(\'fs\'),u=\'admin\',p=\'你的新密码\',s=c.randomBytes(16).toString(\'hex\');'
+      + 'f.writeFileSync(\'/console-data/account.json\',JSON.stringify({username:u,salt:s,hash:c.scryptSync(p,s,64).toString(\'hex\')},null,2));'
+      + 'console.log(\'账号已更新为 \'+u)"';
+  }
+
   function render() {
     var list = $('list');
     $('summary').textContent = cache.length ? '共 ' + cache.length + ' 个域名' : '暂无域名';
@@ -1730,6 +1759,32 @@
   $('btnLogin').onclick = login;
   $('loginPass').onkeydown = function (e) { if (e.key === 'Enter') login(); };
   $('loginUser').onkeydown = function (e) { if (e.key === 'Enter') $('loginPass').focus(); };
+  $('btnForgot').onclick = function () {
+    $('forgotCmd').textContent = forgotCmd();
+    $('forgotMask').classList.add('show');
+  };
+  $('btnForgotClose').onclick = function () { $('forgotMask').classList.remove('show'); };
+  $('forgotMask').onclick = function (e) { if (e.target === $('forgotMask')) $('forgotMask').classList.remove('show'); };
+  $('btnForgotCopy').onclick = function () {
+    var text = $('forgotCmd').textContent;
+    var btn = $('btnForgotCopy');
+    var done = function (ok) {
+      btn.textContent = ok ? '已复制' : '请长按选中复制';
+      setTimeout(function () { btn.textContent = '复制指令'; }, 2000);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { done(true); }, function () { done(false); });
+    } else {
+      try {
+        var r = document.createRange();
+        r.selectNodeContents($('forgotCmd'));
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(r);
+        done(document.execCommand('copy'));
+      } catch (err) { done(false); }
+    }
+  };
   $('btnRefresh').onclick = load;
   $('btnAdd').onclick = function () { openDialog(null); };
   $('btnCancel').onclick = closeDialog;

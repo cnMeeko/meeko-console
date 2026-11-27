@@ -322,6 +322,16 @@ docker tag ghcr.io/cnmeeko/meeko-console:0.3.0 meeko-console:latest
 
 迁移提示：从桥接模式切换到 host 模式后，历史配置里如果存过 `host.docker.internal`，启动时会被自动纠正为 `127.0.0.1`，无需手工改 `domains.caddy`。
 
+### 忘记后台账号密码
+
+账号存在 `console-data/account.json`，只保存加盐哈希，无法找回原密码，只能重设。登录页的「忘记账号密码？」弹窗会给出同样的指令，在服务器终端执行即可（把账号、密码换成自己的）：
+
+```bash
+docker exec meeko-console node -e "const c=require('crypto'),f=require('fs'),u='admin',p='你的新密码',s=c.randomBytes(16).toString('hex');f.writeFileSync('/console-data/account.json',JSON.stringify({username:u,salt:s,hash:c.scryptSync(p,s,64).toString('hex')},null,2));console.log('账号已更新为 '+u)"
+```
+
+改完立即生效、无需重启容器。容器名不是 `meeko-console` 时用 `docker ps` 查实际名称；compose 部署可改用 `docker compose exec console node -e "..."`（在面板目录执行）。也可以直接删掉 `console-data/account.json` 后重启容器，账号密码会回到 `CONSOLE_USER` / `CONSOLE_PASS` 的初始值。
+
 ---
 
 ## ⚠️ 安全提示
